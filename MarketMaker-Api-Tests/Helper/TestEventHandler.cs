@@ -6,19 +6,23 @@ using System.Text;
 using System.Threading.Tasks;
 using MarketMaker.Api.Models.Book;
 using MarketMaker.Api.Models.Statistics;
+using MarketMaker.Api.Rest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json;
 
 namespace MarketMaker_Api_Tests.Helper
 {
-    public class WebSocketEventHandler
+    public class TestEventHandler
     {
-        public WebSocketEventHandler()
+        public TestEventHandler()
         {
             Algorithms = new List<AlgorithmInfo>();
+            TestResult = true;
         }
 
         public List<AlgorithmInfo> Algorithms { get; set; }
+
+        public bool TestResult { get; set; }
 
         public void CompareQuoteAgainstParams(AlgorithmInfo algo)
         {
@@ -62,34 +66,34 @@ namespace MarketMaker_Api_Tests.Helper
                 Debug.WriteLine("OK! Buy Qty: {0}; Original: {1}", buyQty, originalBuyQty);
             else
                 Debug.WriteLine("Error! Buy Qty: {0}; Original: {1}", buyQty, originalBuyQty);
+
             Debug.WriteLine("Spread: {0}; MinSpread: {1}", spread, algo.PricerConfigInfo.MinSpread);
 
-            Assert.AreEqual(true, Util.CompareDouble(sellQty, originalSellQty), "Sell qty is not equal to original qty");
-            Assert.AreEqual(true, Util.CompareDouble(buyQty, originalBuyQty), "Buy qty is not equal to original qty");
-            Assert.AreEqual(originalSellLevels, sellLevels, "Sell levels are not equal to original levels");
-            Assert.AreEqual(originalBuyLevels, buyLevels, "Buy levels are not equal to original levels");
-            Assert.AreEqual(true, spread - algo.PricerConfigInfo.MinSpread >= 0, "Spread are not equal to original levels");
+            CompareTestValues<bool>(true, Util.CompareDouble(sellQty, originalSellQty),
+                                    String.Format("Sell qty: {0} is not equal to original qty: {1}", sellQty, originalSellQty));
+            CompareTestValues<bool>(true, Util.CompareDouble(buyQty, originalBuyQty),
+                                    String.Format("Buy qty: {0} is not equal to original qty: {1}", buyQty, originalBuyQty));
+            CompareTestValues<int>(originalSellLevels, sellLevels,
+                                    String.Format("Sell levels: {0} are not equal to original levels: {1}", sellLevels, originalSellLevels));
+            CompareTestValues<int>(originalBuyLevels, buyLevels,
+                                    String.Format("Buy levels: {0} are not equal to original levels: {1}", buyLevels, originalBuyLevels));
+            CompareTestValues<bool>(true, spread - algo.PricerConfigInfo.MinSpread >= 0,
+                                    String.Format("Spread from book: {0} is not equal to original spread: {1}", spread, algo.PricerConfigInfo.MinSpread));
         }
 
         public void CompareSourceAgainstTargetBook(AlgorithmInfo algo)
         {
-            if (algo.AlgoDictionary.ContainsKey(AlgorithmInfo.BookType.SOURCE) &&
-                this.Algorithms[0].AlgoDictionary.ContainsKey(AlgorithmInfo.BookType.TARGET))
-                Assert.AreEqual(true,
-                                CompareBooks(algo.AlgoDictionary[AlgorithmInfo.BookType.SOURCE],
-                                             this.Algorithms[0].AlgoDictionary[AlgorithmInfo.BookType.TARGET]),
-                                "Test is failed");
-            else
-                Console.WriteLine("Book is NULL");
+            CompareTestValues<bool>(true, algo.AlgoDictionary.ContainsKey(AlgorithmInfo.BookType.SOURCE) &&
+                                          Algorithms[0].AlgoDictionary.ContainsKey(AlgorithmInfo.BookType.TARGET),
+                                          "Book is NULL!");
+            CompareBooks(algo.AlgoDictionary[AlgorithmInfo.BookType.SOURCE],
+                         Algorithms[0].AlgoDictionary[AlgorithmInfo.BookType.TARGET]); 
         }
 
         public void CompareStatisticAgainstTargetBook(AlgorithmInfo algo)
         {
-            if (!algo.AlgoDictionary.ContainsKey(AlgorithmInfo.BookType.TARGET) || algo.TradeStatistic == null)
-            {
-                Console.WriteLine("Data is NULL");
-                return;
-            }
+            CompareTestValues<bool>(true, algo.AlgoDictionary.ContainsKey(AlgorithmInfo.BookType.TARGET) && algo.TradeStatistic != null,
+                                    "Data is NULL");
 
             double sellQty = 0.0, buyQty = 0.0;
             foreach (var ens in algo.AlgoDictionary[AlgorithmInfo.BookType.TARGET].Entries)
@@ -105,41 +109,38 @@ namespace MarketMaker_Api_Tests.Helper
             }
             Debug.WriteLine("Trade Statistic Sell Qty: {0}, Target book: {1}", algo.TradeStatistic.OpenSellQty, sellQty);
             Debug.WriteLine("Trade Statistic Buy Qty: {0}, Target book: {1}", algo.TradeStatistic.OpenBuyQty, buyQty);
-            Assert.AreEqual(algo.TradeStatistic.OpenBuyQty, buyQty,
-                            "Buy Qty doesn't matched. OpenSellQty: {0}, Sell Qty from book: {1}", algo.TradeStatistic.OpenBuyQty, buyQty);
-            Assert.AreEqual(algo.TradeStatistic.OpenSellQty, sellQty,
-                            "Sell Qty doesn't matched. OpenBuyQty: {0}, Buy Qty from book: {1}", algo.TradeStatistic.OpenSellQty, sellQty);
+
+            CompareTestValues<bool>(true, Util.CompareDouble(algo.TradeStatistic.OpenBuyQty, buyQty),
+                            String.Format("Buy Qty doesn't matched. OpenSellQty: {0}, Sell Qty from book: {1}", algo.TradeStatistic.OpenBuyQty, buyQty));
+            CompareTestValues<bool>(true, Util.CompareDouble(algo.TradeStatistic.OpenSellQty, sellQty),
+                            String.Format("Sell Qty doesn't matched. OpenBuyQty: {0}, Buy Qty from book: {1}", algo.TradeStatistic.OpenSellQty, sellQty));
         }
 
-        public bool CompareBooks(L2PackageDto sourceBook, L2PackageDto targetBook)
+        public void CompareBooks(L2PackageDto sourceBook, L2PackageDto targetBook)
         {
-            bool result = true;
             Debug.WriteLine("Number Source: {0}, Target: {1}", sourceBook.SequenceNumber, targetBook.SequenceNumber);
             Debug.WriteLine("Count of levels. Source {0}, Target: {1}", sourceBook.Entries.Count, targetBook.Entries.Count);
-            if (sourceBook.Entries.Count != targetBook.Entries.Count)
-            {
-                Console.WriteLine("Count of levels is not equal. Source {0}, Quotes: {1}", sourceBook.Entries.Count, targetBook.Entries.Count);
-                return false;
-            }
+            CompareTestValues<int>(sourceBook.Entries.Count, targetBook.Entries.Count,
+                                   String.Format("Count of levels is not equal. Source {0}, Quotes: {1}", sourceBook.Entries.Count, targetBook.Entries.Count));
 
             foreach (var level in sourceBook.Entries)
             {
                 var targetLevel = targetBook.Entries.FirstOrDefault(l => l.Side == level.Side && l.Level == level.Level);
-                if (targetLevel != null)
-                {
-                    Debug.WriteLine("Side {3} Level {0}. Source {1}; Target: {2}", level.Level, level.Quantity, targetLevel.Quantity, targetLevel.Side);
-                    bool temp = Util.CompareDouble(targetLevel.Quantity, level.Quantity);
-                    if (!temp)
-                        Console.WriteLine("Qty is not the same at level {0} for {1}. Source {2}; Target: {3}", level.Level, level.Side, level.Quantity, targetLevel.Quantity);
-                    result = temp && result;
-                }
-                else
-                {
-                    Console.WriteLine("Level {0} doesn't exist for {1}", level.Level, level.Side);
-                    return false;
-                }
+
+                CompareTestValues<bool>(true, targetLevel != null, String.Format("Level {0} doesn't exist for {1}", level.Level, level.Side));
+
+                Debug.WriteLine("Side {3} Level {0}. Source {1}; Target: {2}", level.Level, level.Quantity, targetLevel.Quantity, targetLevel.Side);
+
+                CompareTestValues(true, Util.CompareDouble(targetLevel.Quantity, level.Quantity),
+                                        String.Format("Qty is not the same at level {0} for {1}. Source {2}; Target: {3}",
+                                        level.Level, level.Side, level.Quantity, targetLevel.Quantity));
             }
-            return result;
+        }
+
+        public void CompareTestValues<T>(T expected, T actual, string message)
+        {
+            TestResult = expected.Equals(actual) && TestResult;
+            Assert.AreEqual(expected, actual, message);
         }
     }
 }

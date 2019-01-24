@@ -2,10 +2,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using MarketMaker.Api.Models.Book;
 using MarketMaker.Api.Models.Config;
 using MarketMaker.Api.Models.Statistics;
+using MarketMaker.Api.Rest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json;
 
@@ -15,6 +17,7 @@ namespace MarketMaker_Api_Tests.Helper
     {
         public AlgorithmInfo()
         {
+            AlgoId = -1;
             AlgoDictionary = new Dictionary<BookType, L2PackageDto>();
         }
 
@@ -75,23 +78,45 @@ namespace MarketMaker_Api_Tests.Helper
             RiskLimitConfigInfo.AlgoId = algoId;
         }
 
+        public void StopDeleteAll(IMarketMakerRestService service)
+        {
+            if(AlgoId == -1)
+                return;
+            if (HedgerConfigInfo.Running)
+            {
+                service.StopHedger(AlgoId);
+                Thread.Sleep(500);
+            }
+            if (PricerConfigInfo.Running)
+            {
+                service.StopPricer(AlgoId);
+                Thread.Sleep(500);
+            }
+            if (InstrumentConfigInfo.Running)
+            {
+                service.StopInstrument(AlgoId);
+                Thread.Sleep(500);
+            }
+            service.DeleteAlgorithm(AlgoId);
+        }
+
         public bool Equals(FullInstrumentConfigDto allConfiguration)
         {
-            return this.EqualInstrument(allConfiguration.InstrumentConfig, true) &&
-                   this.EqualPricer(allConfiguration.PricerConfig, true) &&
-                   this.EqualHedger(allConfiguration.HedgerConfig, true) &&
-                   this.EqualRiskLimit(allConfiguration.RiskLimitsConfig, true);
+            return EqualInstrument(allConfiguration.InstrumentConfig, true) &&
+                   EqualPricer(allConfiguration.PricerConfig, true) &&
+                   EqualHedger(allConfiguration.HedgerConfig, true) &&
+                   EqualRiskLimit(allConfiguration.RiskLimitsConfig, true);
         }
 
         public bool EqualInstrument(InstrumentConfigDto instrumentConfig, bool printMessage)
         {
-            bool isEqual = this.InstrumentConfigInfo.AlgoId == instrumentConfig.AlgoId &&
-                   this.InstrumentConfigInfo.AlgoKey == instrumentConfig.AlgoKey &&
-                   this.InstrumentConfigInfo.Exchange == instrumentConfig.Exchange &&
-                   this.InstrumentConfigInfo.SourceExchange == instrumentConfig.SourceExchange &&
-                   this.InstrumentConfigInfo.Instrument == instrumentConfig.Instrument &&
-                   this.InstrumentConfigInfo.FxLeg == instrumentConfig.FxLeg &&
-                   this.InstrumentConfigInfo.Underlyings == instrumentConfig.Underlyings;
+            bool isEqual = InstrumentConfigInfo.AlgoId == instrumentConfig.AlgoId &&
+                   InstrumentConfigInfo.AlgoKey == instrumentConfig.AlgoKey &&
+                   InstrumentConfigInfo.Exchange == instrumentConfig.Exchange &&
+                   InstrumentConfigInfo.SourceExchange == instrumentConfig.SourceExchange &&
+                   InstrumentConfigInfo.Instrument == instrumentConfig.Instrument &&
+                   InstrumentConfigInfo.FxLeg == instrumentConfig.FxLeg &&
+                   InstrumentConfigInfo.Underlyings == instrumentConfig.Underlyings;
             if(!isEqual && printMessage)
                 Console.WriteLine("Instrument doesn't match with added.");
             return isEqual;
@@ -99,14 +124,14 @@ namespace MarketMaker_Api_Tests.Helper
 
         public bool EqualPricer(PricerConfigDto pricerConfig, bool printMessage)
         {
-            bool isEqual = this.PricerConfigInfo.AlgoId == pricerConfig.AlgoId &&
-                   this.PricerConfigInfo.AlgoKey == pricerConfig.AlgoKey &&
-                   this.PricerConfigInfo.SellQuoteSizes == pricerConfig.SellQuoteSizes &&
-                   this.PricerConfigInfo.BuyQuoteSizes == pricerConfig.BuyQuoteSizes &&
-                   this.PricerConfigInfo.BuyMargins == pricerConfig.BuyMargins &&
-                   this.PricerConfigInfo.SellMargins == pricerConfig.SellMargins &&
-                   this.PricerConfigInfo.AggregationMethod == pricerConfig.AggregationMethod &&
-                   Util.CompareDouble(this.PricerConfigInfo.MinPriceChange, pricerConfig.MinPriceChange);
+            bool isEqual = PricerConfigInfo.AlgoId == pricerConfig.AlgoId &&
+                   PricerConfigInfo.AlgoKey == pricerConfig.AlgoKey &&
+                   PricerConfigInfo.SellQuoteSizes == pricerConfig.SellQuoteSizes &&
+                   PricerConfigInfo.BuyQuoteSizes == pricerConfig.BuyQuoteSizes &&
+                   PricerConfigInfo.BuyMargins == pricerConfig.BuyMargins &&
+                   PricerConfigInfo.SellMargins == pricerConfig.SellMargins &&
+                   PricerConfigInfo.AggregationMethod == pricerConfig.AggregationMethod &&
+                   Util.CompareDouble(PricerConfigInfo.MinPriceChange, pricerConfig.MinPriceChange);
             if (!isEqual && printMessage)
                 Console.WriteLine("Pricer doesn't match with added.");
             return isEqual;
@@ -114,14 +139,14 @@ namespace MarketMaker_Api_Tests.Helper
 
         public bool EqualHedger(HedgerConfigDto hedgerConfig, bool printMessage)
         {
-            bool isEqual = this.HedgerConfigInfo.AlgoId == hedgerConfig.AlgoId &&
-                   this.HedgerConfigInfo.AlgoKey == hedgerConfig.AlgoKey &&
-                   this.HedgerConfigInfo.HedgeInstrument == hedgerConfig.HedgeInstrument &&
-                   this.HedgerConfigInfo.HedgeStrategy == hedgerConfig.HedgeStrategy &&
-                   this.HedgerConfigInfo.ExecutionStyle == hedgerConfig.ExecutionStyle &&
-                   this.HedgerConfigInfo.PositionMaxNormSize == hedgerConfig.PositionMaxNormSize &&
-                   this.HedgerConfigInfo.VenuesList == hedgerConfig.VenuesList &&
-                   Util.CompareDouble(this.HedgerConfigInfo.MaxOrderSize, hedgerConfig.MaxOrderSize);
+            bool isEqual = HedgerConfigInfo.AlgoId == hedgerConfig.AlgoId &&
+                   HedgerConfigInfo.AlgoKey == hedgerConfig.AlgoKey &&
+                   HedgerConfigInfo.HedgeInstrument == hedgerConfig.HedgeInstrument &&
+                   HedgerConfigInfo.HedgeStrategy == hedgerConfig.HedgeStrategy &&
+                   HedgerConfigInfo.ExecutionStyle == hedgerConfig.ExecutionStyle &&
+                   HedgerConfigInfo.PositionMaxNormSize == hedgerConfig.PositionMaxNormSize &&
+                   HedgerConfigInfo.VenuesList == hedgerConfig.VenuesList &&
+                   Util.CompareDouble(HedgerConfigInfo.MaxOrderSize, hedgerConfig.MaxOrderSize);
             if (!isEqual && printMessage)
                 Console.WriteLine("Hedger doesn't match with added.");
             return isEqual;
@@ -129,12 +154,12 @@ namespace MarketMaker_Api_Tests.Helper
 
         public bool EqualRiskLimit(RiskLimitsConfigDto riskLimitConfig, bool printMessage)
         {
-            bool isEqual = this.RiskLimitConfigInfo.AlgoId == riskLimitConfig.AlgoId &&
-                   this.RiskLimitConfigInfo.AlgoKey == riskLimitConfig.AlgoKey &&
-                   this.RiskLimitConfigInfo.MinBuyQuoteActiveTime == riskLimitConfig.MinBuyQuoteActiveTime &&
-                   this.RiskLimitConfigInfo.MinSellQuoteActiveTime == riskLimitConfig.MinSellQuoteActiveTime &&
-                   Util.CompareDouble(this.RiskLimitConfigInfo.MaxLongExposure, riskLimitConfig.MaxLongExposure) &&
-                   Util.CompareDouble(this.RiskLimitConfigInfo.MaxShortExposure, riskLimitConfig.MaxShortExposure);
+            bool isEqual = RiskLimitConfigInfo.AlgoId == riskLimitConfig.AlgoId &&
+                   RiskLimitConfigInfo.AlgoKey == riskLimitConfig.AlgoKey &&
+                   RiskLimitConfigInfo.MinBuyQuoteActiveTime == riskLimitConfig.MinBuyQuoteActiveTime &&
+                   RiskLimitConfigInfo.MinSellQuoteActiveTime == riskLimitConfig.MinSellQuoteActiveTime &&
+                   Util.CompareDouble(RiskLimitConfigInfo.MaxLongExposure, riskLimitConfig.MaxLongExposure) &&
+                   Util.CompareDouble(RiskLimitConfigInfo.MaxShortExposure, riskLimitConfig.MaxShortExposure);
             if (!isEqual && printMessage)
                 Console.WriteLine("Risk Limits don't match with added.");
             return isEqual;
@@ -172,7 +197,7 @@ namespace MarketMaker_Api_Tests.Helper
         {
             if (l2Book.Type != L2PackageType.SNAPSHOT_FULL_REFRESH)
                 return;
-            this.AlgoDictionary[bookType] = l2Book;
+            AlgoDictionary[bookType] = l2Book;
             OnMessageHandler bookHandler = bookType == BookType.QUOTE ? QuoteMessageHandler :
                                            bookType == BookType.SOURCE ? SourceMessageHandler :
                                            bookType == BookType.TARGET ? TargetMessageHandler : HedgeMessageHandler;
@@ -181,8 +206,8 @@ namespace MarketMaker_Api_Tests.Helper
 
         public void OnTradeStatisticMessage(AlgoInstrumentStatisticsDto[] statistics)
         {
-            this.TradeStatistic = statistics.FirstOrDefault(a => a.AlgoId == this.AlgoId);
-            if (this.TradeStatistic == null)
+            TradeStatistic = statistics.FirstOrDefault(a => a.AlgoId == AlgoId);
+            if (TradeStatistic == null)
                 return;
             TradeStatisticHandler?.Invoke(this);
         }

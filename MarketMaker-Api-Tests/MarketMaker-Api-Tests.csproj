@@ -64,8 +64,9 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CryptoCortex\StompWebSocketServiceCC.cs" />
     <Compile Include="Helper\AlgorithmInfo.cs" />
-    <Compile Include="Helper\WebSocketEventHandler.cs" />
+    <Compile Include="Helper\TestEventHandler.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Scenario\Risk.cs" />

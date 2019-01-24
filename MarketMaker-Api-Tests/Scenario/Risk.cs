@@ -8,5 +8,6 @@ namespace MarketMaker_Api_Tests.Scenario
 {
     class Risk
     {
+
     }
 }
