@@ -8,6 +8,7 @@ using MarketMaker.Api.Models.Book;
 using MarketMaker.Api.Models.Config;
 using MarketMaker.Api.Models.Statistics;
 using MarketMaker.Api.Rest;
+using MarketMaker_Api_Tests.CryptoCortex.Models;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json;
 
@@ -19,28 +20,32 @@ namespace MarketMaker_Api_Tests.Helper
         {
             AlgoId = -1;
             AlgoDictionary = new Dictionary<BookType, L2PackageDto>();
+            IsDelete = false;
+            InitialPositionSize = Double.NaN;
         }
 
-        public AlgorithmInfo(string fileInstrument, string filePricer, string fileHeadger, string fileRiskLimit)
+        public AlgorithmInfo(string fileInstrument, string filePricer, string fileHeadger, string fileRiskLimit) : this()
         {
-            AlgoId = -1;
             InstrumentConfigInfo = JsonConvert.DeserializeObject<InstrumentConfigDto>(Util.ReadFile(Util.paramsFolder + fileInstrument));
             PricerConfigInfo = JsonConvert.DeserializeObject<PricerConfigDto>(Util.ReadFile(Util.paramsFolder + filePricer));
             HedgerConfigInfo = JsonConvert.DeserializeObject<HedgerConfigDto>(Util.ReadFile(Util.paramsFolder + fileHeadger));
             RiskLimitConfigInfo = JsonConvert.DeserializeObject<RiskLimitsConfigDto>(Util.ReadFile(Util.paramsFolder + fileRiskLimit));
-            AlgoDictionary = new Dictionary<BookType, L2PackageDto>();
+            IsDelete = true;
         }
 
-        public AlgorithmInfo(FullInstrumentConfigDto instrument)
+        public AlgorithmInfo(FullInstrumentConfigDto instrument) : this()
         {
             AlgoId = instrument.InstrumentConfig.AlgoId != null ? (long)instrument.InstrumentConfig.AlgoId : -1;
             InstrumentConfigInfo = instrument.InstrumentConfig;
             PricerConfigInfo = instrument.PricerConfig;
             HedgerConfigInfo = instrument.HedgerConfig;
             RiskLimitConfigInfo = instrument.RiskLimitsConfig;
-            AlgoDictionary = new Dictionary<BookType, L2PackageDto>();
         }
 
+        private bool IsDelete { get; set; }
+        public double InitialPositionSize { get; set; }
+        public double ChangePositionSize { get; set; }
+        public OrderDbo OrderToSend { get; set; }
         public long AlgoId { get; set; }
         public InstrumentConfigDto InstrumentConfigInfo { get; set; }
         public PricerConfigDto PricerConfigInfo { get; set; }
@@ -58,6 +63,8 @@ namespace MarketMaker_Api_Tests.Helper
         public Dictionary<BookType, L2PackageDto> AlgoDictionary { get; set; }
 
         public AlgoInstrumentStatisticsDto TradeStatistic { get; set; }
+
+        public List<ExecutionDto> Executions { get; set; }
 
         public static T CreateConfig<T>(string fileName, long id)
         {
@@ -80,7 +87,7 @@ namespace MarketMaker_Api_Tests.Helper
 
         public void StopDeleteAll(IMarketMakerRestService service)
         {
-            if(AlgoId == -1)
+            if(AlgoId == -1 || !IsDelete)
                 return;
             if (HedgerConfigInfo.Running)
             {
@@ -165,6 +172,17 @@ namespace MarketMaker_Api_Tests.Helper
             return isEqual;
         }
 
+        public static double GetQuoteSize(string quote)
+        {
+            if (quote.Contains("["))
+            {
+                int index = quote.IndexOf("[");
+                return Double.Parse(quote.Substring(0, index).Trim(' '));
+            }
+
+            return quote.Split(' ').Sum(x => Double.Parse(x));
+        }
+
         public delegate void OnMessageHandler(AlgorithmInfo algo);
 
         public event OnMessageHandler QuoteMessageHandler;
@@ -172,6 +190,7 @@ namespace MarketMaker_Api_Tests.Helper
         public event OnMessageHandler HedgeMessageHandler;
         public event OnMessageHandler TargetMessageHandler;
         public event OnMessageHandler TradeStatisticHandler;
+        public event OnMessageHandler ExecutionsHandler;
 
         public void OnQuoteMessage(L2PackageDto l2Book)
         {
@@ -210,6 +229,14 @@ namespace MarketMaker_Api_Tests.Helper
             if (TradeStatistic == null)
                 return;
             TradeStatisticHandler?.Invoke(this);
+        }
+
+        public void OnExecutionMessage(ExecutionDto[] executions)
+        {
+            Executions = new List<ExecutionDto>(executions);
+            if(Executions == null)
+                return;
+            ExecutionsHandler?.Invoke(this);
         }
     }
 }

@@ -64,6 +64,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CryptoCortex\Models\OrderDbo.cs" />
     <Compile Include="CryptoCortex\StompWebSocketServiceCC.cs" />
     <Compile Include="Helper\AlgorithmInfo.cs" />
     <Compile Include="Helper\TestEventHandler.cs" />
@@ -77,6 +78,7 @@
     <None Include="App.config" />
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>

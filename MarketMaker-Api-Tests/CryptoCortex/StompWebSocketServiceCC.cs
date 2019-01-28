@@ -21,29 +21,27 @@ namespace MarketMaker_Api_Tests.CriptoCortex
 
         public void SendMessage(string message)
         {
+            //Debug.WriteLine("SEND\r\n" + message + "\r\n\r\n\0");
             _socket.Send("SEND\r\n" + message + "\r\n\r\n\0");
         }
 
         protected override void SocketOnOnMessage(object sender, MessageEventArgs e)
         {
-            int bodyStartIndex = e.Data.IndexOf("\n\n");
+            //Debug.WriteLine(e.Data);
             int subIdStartIndex = e.Data.IndexOf(subIdPrefix);
             int msgIdStartIndex = e.Data.IndexOf(msgIdPrefix);
             int statusStartIndex = e.Data.IndexOf(statusPrefix);
-            if (bodyStartIndex > 0 && subIdStartIndex > 0 && msgIdStartIndex > 0)
+            if (subIdStartIndex > 0 && msgIdStartIndex > 0 && statusStartIndex > 0)
             {
                 int s = statusStartIndex + statusPrefixLength;
                 string status = e.Data.Substring(s, 3);
-                Assert.AreEqual("200", status, "Order is not send. Status {0}", status);
 
                 s = subIdStartIndex + subIdPrefixLength;
                 string subId = e.Data.Substring(s, msgIdStartIndex - s - 1/*-1 for trailing \n*/).Replace("\\c", ":");
 
-                string message = e.Data.Substring(bodyStartIndex);
-
                 Action<string> action;
                 if (_subscribers.TryGetValue(subId, out action))
-                    action(message);
+                    action(status);
             }
             else
             {
@@ -53,7 +51,7 @@ namespace MarketMaker_Api_Tests.CriptoCortex
 
         public override string GetSubscribeMessage(string subscriptionId, string topic)
 	    {
-            return $"SUBSCRIBE\r\nX-Deltix-Nonce:{DateTime.Now.ToFileTime()}\r\nid:{subscriptionId}\r\ndestination:{topic}\r\n\r\n\0";
+            return $"SUBSCRIBE\r\nX-Deltix-Nonce:{ConvertToUnixTimestamp(DateTime.Now)}\r\nid:{subscriptionId}\r\ndestination:{topic}\r\n\r\n\0";
         }
 
 	    public override string GetConnectMessage(string token)

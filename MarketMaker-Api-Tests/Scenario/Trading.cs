@@ -6,12 +6,15 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
+using MarketMaker.Api.Models.Book;
 using MarketMaker.Api.Models.Config;
 using MarketMaker.Api.Rest;
 using MarketMaker.Api.Subscriptions;
 using MarketMaker_Api_Tests.CriptoCortex;
+using MarketMaker_Api_Tests.CryptoCortex.Models;
 using MarketMaker_Api_Tests.Helper;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Newtonsoft.Json;
 using Timer = System.Timers.Timer;
 
 namespace MarketMaker_Api_Tests.Scenario
@@ -241,7 +244,6 @@ namespace MarketMaker_Api_Tests.Scenario
             catch (Exception ex)
             {
                 Debug.WriteLine(ex.ToString());
-                return;
             }
 
             WaitTestEvents(10);
@@ -263,22 +265,43 @@ namespace MarketMaker_Api_Tests.Scenario
         [TestMethod]
         public void CreateOrderCC()
         {
+            Initialize();
+            _testEvent.Algorithms[0] = new AlgorithmInfo(_mmRest.GetInstrument(240));
+            AlgorithmInfo algo = _testEvent.Algorithms[0];
+            algo.OrderToSend = new OrderDbo() { Destination = "DLTXMM", Quantity = 10, Side = Side.SELL, Type = OrderDbo.OrderType.MARKET, SecurityId = "ETHBTC" };
+
+            var executionsListener = _wsFactory.CreateExecutionsSubscription();
+            var tradeStatisticListener = _wsFactory.CreateTradingStatisticsSubscription();
+
+            algo.ExecutionsHandler += _testEvent.CalculateSizeExecutions;
+            executionsListener.Subscribe(240, algo.OnExecutionMessage);
+
+            algo.TradeStatisticHandler += _testEvent.MonitorChangesPosition;
+            tradeStatisticListener.Subscribe(algo.OnTradeStatisticMessage);
+
+            WaitTestEvents(2);
+
             string authorization = "Basic d2ViOg==";
             string urlCrypto = "http://18.218.20.9";
             IMarketMakerRestService restCrypto = MakerMakerRestServiceFactory.CreateMakerRestService(urlCrypto, "/oauth/token",
                 authorization);
             restCrypto.Authorize("Tester 1", "password");
             StompWebSocketServiceCC wsCrypto = new StompWebSocketServiceCC("ws://18.218.20.9/websocket/v1?trader_0", restCrypto.Token);
-            wsCrypto.Subscribe("/user/v1/responses", PrintMessage);
-            string order = "{\"quantity\":\"20\",\"side\":\"sell\",\"type\":\"market\",\"security_id\":\"ETHBTC\",\"destination\":\"DLTXMM\"}";
-            string orderRequest = String.Format("correlation-id:wyj622yt3\r\nX-Deltix-Nonce:{0}\r\ndestination:/app/v1/orders/create\r\n\r\n{1}", DateTime.Now.ToFileTime(), order);
-            Console.WriteLine("SEND\r\n" + orderRequest);
+            wsCrypto.Subscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
+            Thread.Sleep(500);
+
+            string orderRequest = String.Format("correlation-id:ioeswd7t9m\r\nX-Deltix-Nonce:{0}\r\ndestination:/app/v1/orders/create\r\n\r\n{1}",
+                                                 StompWebSocketService.ConvertToUnixTimestamp(DateTime.Now),
+                                                 JsonConvert.SerializeObject(algo.OrderToSend));
+
             wsCrypto.SendMessage(orderRequest);
-            Thread.Sleep(3000);
-        }
-        public void PrintMessage(string message)
-        {
-            Console.WriteLine(message);
+
+            WaitTestEvents(7);
+            executionsListener.Unsubscribe(6, algo.OnExecutionMessage);
+            algo.ExecutionsHandler -= _testEvent.CompareStatisticAgainstTargetBook;
+            
+            tradeStatisticListener.Unsubscribe(algo.OnTradeStatisticMessage);
+            algo.TradeStatisticHandler -= _testEvent.MonitorChangesPosition;
         }
 
         public void WaitTestEvents(int seconds)

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using MarketMaker.Api.Models.Book;
 using MarketMaker.Api.Models.Statistics;
 using MarketMaker.Api.Rest;
+using MarketMaker.Api.Subscriptions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json;
 
@@ -20,10 +21,10 @@ namespace MarketMaker_Api_Tests.Helper
             TestResult = true;
         }
 
+        private DateTime startTime = DateTime.Now;
+        private bool WaitUpdateTradeStatistics { get; set; }
         public List<AlgorithmInfo> Algorithms { get; set; }
-
         public bool TestResult { get; set; }
-
         public void CompareQuoteAgainstParams(AlgorithmInfo algo)
         {
             double originalSellQty = algo.PricerConfigInfo.SellQuoteSizes.Split(' ').Sum(x => Double.Parse(x));
@@ -135,6 +136,79 @@ namespace MarketMaker_Api_Tests.Helper
                                         String.Format("Qty is not the same at level {0} for {1}. Source {2}; Target: {3}",
                                         level.Level, level.Side, level.Quantity, targetLevel.Quantity));
             }
+        }
+
+        public void InitialisePositionSize(AlgorithmInfo algo)
+        {
+            if (algo.TradeStatistic != null && Double.IsNaN(algo.InitialPositionSize))
+                algo.InitialPositionSize = algo.TradeStatistic.CurrentPositionSize;
+        }
+
+        public void MonitorChangesPosition(AlgorithmInfo algo)
+        {
+            Debug.WriteLine("MonitorChangesPosition, Initial Position Size: {0}", algo.InitialPositionSize);
+            InitialisePositionSize(algo);
+            if (algo.TradeStatistic != null && !Util.CompareDouble(algo.ChangePositionSize, 0.0))
+            {
+                algo.ChangePositionSize = algo.OrderToSend.Side == Side.BUY
+                    ? -algo.ChangePositionSize
+                    : algo.ChangePositionSize;
+                Debug.WriteLine("Initial position size: {0}, Change size: {1}, Current position size: {2}",
+                                algo.InitialPositionSize, algo.ChangePositionSize, algo.TradeStatistic.CurrentPositionSize);
+                // CurrentPositionSize can be partially updated in the message for trade statistics while all the executions are filled.
+                // Sometimes the next message for trade statistics should be waited for.
+                bool isNeedWaitNextMessage = Util.CompareDouble(algo.InitialPositionSize, algo.TradeStatistic.CurrentPositionSize) ||
+                                             Math.Abs(algo.TradeStatistic.CurrentPositionSize - algo.InitialPositionSize) <
+                                             Math.Abs(algo.ChangePositionSize);
+                if (isNeedWaitNextMessage && !WaitUpdateTradeStatistics)
+                {
+                    WaitUpdateTradeStatistics = true;
+                    return;
+                }
+                WaitUpdateTradeStatistics = false;
+
+                CompareTestValues(true, Util.CompareDouble(algo.InitialPositionSize + algo.ChangePositionSize, algo.TradeStatistic.CurrentPositionSize),
+                                  "Position Size is different");
+
+                algo.InitialPositionSize = algo.TradeStatistic.CurrentPositionSize;
+                algo.ChangePositionSize = 0.0;
+            }
+        }
+
+        public void CalculateSizeExecutions(AlgorithmInfo algo)
+        {
+            Debug.WriteLine("CalculateSizeExecutions, Executions count: {0}", algo.Executions.Count);
+
+            algo.ChangePositionSize = 0.0;
+            DateTime newTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Local);
+            foreach (var exec in algo.Executions)
+            {
+                DateTime execTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(exec.Timestamp).ToLocalTime();
+                if (execTime > startTime)
+                {
+                    algo.ChangePositionSize += exec.ExecutionSize;
+                    newTime = execTime > newTime ? execTime : newTime;
+                    //Debug.WriteLine(exec.OrderCorrelationId);
+                }
+            }
+            Debug.WriteLine("Summary executions size: {0}", algo.ChangePositionSize);
+
+            if (Util.CompareDouble(algo.ChangePositionSize, 0.0))
+                return;
+
+            //startTime = newTime;
+            double maxExecutionsSizeFromParams = algo.OrderToSend.Side == Side.BUY ? AlgorithmInfo.GetQuoteSize(algo.PricerConfigInfo.SellQuoteSizes)
+                                                                        : AlgorithmInfo.GetQuoteSize(algo.PricerConfigInfo.BuyQuoteSizes);
+            double maxExecutionsSize = algo.OrderToSend.Quantity <= maxExecutionsSizeFromParams ?
+                                       algo.OrderToSend.Quantity : maxExecutionsSizeFromParams;
+            CompareTestValues(true, Math.Abs(maxExecutionsSize - algo.ChangePositionSize) < Util.delta,
+                                    String.Format("Size of executions exceeds the allowable. Summary size of executions: {0}, Allowable size: {1}",
+                                    algo.ChangePositionSize, maxExecutionsSize));
+        }
+
+        public void CheckWebSocketStatus(string status)
+        {
+            CompareTestValues("200", status, String.Format("Error! Status {0}", status));
         }
 
         public void CompareTestValues<T>(T expected, T actual, string message)
