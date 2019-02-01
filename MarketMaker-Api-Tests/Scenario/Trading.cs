@@ -317,7 +317,7 @@ namespace MarketMaker_Api_Tests.Scenario
         }
 
         [TestMethod]
-        public void CreateOrderCC()
+        public void SendMarketOrders()
         {
             Initialize();
             _testEvent.Algorithms[0] = new AlgorithmInfo(_mmRest.GetInstrument(240));
@@ -325,7 +325,7 @@ namespace MarketMaker_Api_Tests.Scenario
 
             Assert.AreEqual(true, algo.InstrumentConfigInfo.Running, "Instrument is not run");
 
-            algo.OrderToSend = new OrderDbo() { Destination = "DLTXMM", Quantity = 10, Side = Side.SELL, Type = OrderDbo.OrderType.MARKET, SecurityId = "ETHBTC" };
+            algo.OrderToSend = new OrderDbo() { Destination = "DLTXMM", Quantity = 10, Side = Side.BUY, Type = OrderDbo.OrderType.MARKET, SecurityId = "ETHBTC" };
 
             var executionsListener = _wsFactory.CreateExecutionsSubscription();
             var tradeStatisticListener = _wsFactory.CreateTradingStatisticsSubscription();
@@ -347,13 +347,15 @@ namespace MarketMaker_Api_Tests.Scenario
             wsCrypto.Subscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
             Thread.Sleep(500);
 
-            string orderRequest = String.Format("correlation-id:ioeswd7t9m\r\nX-Deltix-Nonce:{0}\r\ndestination:/app/v1/orders/create\r\n\r\n{1}",
-                                                 StompWebSocketService.ConvertToUnixTimestamp(DateTime.Now),
-                                                 JsonConvert.SerializeObject(algo.OrderToSend));
+            // Buy Order
+            wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            WaitTestEvents(5);
 
-            wsCrypto.SendMessage(orderRequest);
+            algo.OrderToSend.Side = Side.SELL;
+            // Buy Order
+            wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            WaitTestEvents(6);
 
-            WaitTestEvents(7);
             executionsListener.Unsubscribe(6, algo.OnExecutionMessage);
             algo.ExecutionsHandler -= _testEvent.CompareStatisticAgainstTargetBook;
             

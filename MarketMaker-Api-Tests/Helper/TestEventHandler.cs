@@ -144,25 +144,25 @@ namespace MarketMaker_Api_Tests.Helper
 
         public void InitialisePositionSize(AlgorithmInfo algo)
         {
-            if (algo.TradeStatistic != null && Double.IsNaN(algo.InitialPositionSize))
-                algo.InitTradeStatistic = algo.TradeStatistic;
+            if (algo.TradeStatistic != null && algo.InitTradeStatistic == null)
+                algo.InitTradeStatistic = (AlgoInstrumentStatisticsDto)algo.TradeStatistic.Clone(); ;
         }
 
         public void MonitorChangesPosition(AlgorithmInfo algo)
         {
+            InitialisePositionSize(algo);
             Debug.WriteLine("MonitorChangesPosition, Initial Position Size: {0}, Seconds after received executions {1}",
                             algo.InitTradeStatistic.CurrentPositionSize, (DateTime.Now - _receivedExecutionsTime).TotalSeconds);
-            InitialisePositionSize(algo);
             if (algo.TradeStatistic != null && !Util.CompareDouble(algo.ChangePositionSize, 0.0) &&
                (DateTime.Now - _receivedExecutionsTime).TotalSeconds > WaitCurPosSizeSecs)
             {
                 bool isBuyOrder = algo.OrderToSend.Side == Side.BUY;
                 algo.ChangePositionSize = isBuyOrder ? -algo.ChangePositionSize : algo.ChangePositionSize;
 
-                Debug.WriteLine("Enter inside. Initial position size: {0}, Change size: {1}, Current position size: {2}" +
+                Debug.WriteLine("Enter inside. Initial position size: {0}, Change size: {1}, Current position size: {2} " +
                                 "TradeSellQty: {3}, TradeBuyQty {4}", algo.InitTradeStatistic.CurrentPositionSize,
                                  algo.ChangePositionSize, algo.TradeStatistic.CurrentPositionSize,
-                                 algo.InitTradeStatistic.TradeSellQty, algo.InitTradeStatistic.TradeBuyQty);
+                                 algo.TradeStatistic.TradeSellQty, algo.TradeStatistic.TradeBuyQty);
 
                 CompareTestValues(true, CompareChangesStatistic(algo.InitTradeStatistic.CurrentPositionSize,
                                   algo.TradeStatistic.CurrentPositionSize, algo.ChangePositionSize),

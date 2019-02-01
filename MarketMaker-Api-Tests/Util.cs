@@ -5,6 +5,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MarketMaker.Api.Subscriptions;
+using MarketMaker_Api_Tests.CryptoCortex.Models;
+using Newtonsoft.Json;
 
 namespace MarketMaker_Api_Tests
 {
@@ -35,6 +38,13 @@ namespace MarketMaker_Api_Tests
         {
             //Debug.WriteLine("First: {0}, Second: {1}", first, second);
             return Math.Abs(first - second) < delta;
+        }
+
+        public static string GetSendOrderRequest(OrderDbo order)
+        {
+            return String.Format("correlation-id:ioeswd7t9m\r\nX-Deltix-Nonce:{0}\r\ndestination:/app/v1/orders/create\r\n\r\n{1}",
+                                 StompWebSocketService.ConvertToUnixTimestamp(DateTime.Now),
+                                 JsonConvert.SerializeObject(order));
         }
     }
 }
