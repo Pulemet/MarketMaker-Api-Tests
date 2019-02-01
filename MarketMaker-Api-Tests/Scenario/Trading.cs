@@ -235,16 +235,9 @@ namespace MarketMaker_Api_Tests.Scenario
             var targetBookLister = _wsFactory.CreateTargetMarketDataSubscription();
             var statisticListener = _wsFactory.CreateTradingStatisticsSubscription();
 
-            try
-            {
-                targetBookLister.Subscribe(_testEvent.Algorithms[0].AlgoId, _testEvent.Algorithms[0].OnTargetMessage);
-                _testEvent.Algorithms[0].TargetMessageHandler += _testEvent.CompareStatisticAgainstTargetBook;
-                statisticListener.Subscribe(_testEvent.Algorithms[0].OnTradeStatisticMessage);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine(ex.ToString());
-            }
+            targetBookLister.Subscribe(_testEvent.Algorithms[0].AlgoId, _testEvent.Algorithms[0].OnTargetMessage);
+            _testEvent.Algorithms[0].TargetMessageHandler += _testEvent.CompareStatisticAgainstTargetBook;
+            statisticListener.Subscribe(_testEvent.Algorithms[0].OnTradeStatisticMessage);
 
             WaitTestEvents(10);
 
@@ -263,11 +256,75 @@ namespace MarketMaker_Api_Tests.Scenario
         }
 
         [TestMethod]
+        public void CheckSpread()
+        {
+            Initialize();
+            AlgorithmInfo algo = _testEvent.Algorithms[0];
+            algo.InstrumentConfigInfo = _mmRest.CreateInstrument(algo.InstrumentConfigInfo);
+            algo.SetAlgoId(algo.InstrumentConfigInfo.AlgoId);
+            algo.PricerConfigInfo = _mmRest.SavePricer(algo.PricerConfigInfo);
+            algo.RiskLimitConfigInfo = _mmRest.SaveRiskLimitsConfig(algo.RiskLimitConfigInfo);
+
+            _testEvent.Algorithms[1] = new AlgorithmInfo("instrument.json", "pricer.json", "hedger.json", "risklimit.json");
+            AlgorithmInfo origSpreadAlgo = _testEvent.Algorithms[1];
+            origSpreadAlgo.InstrumentConfigInfo = _mmRest.CreateInstrument(origSpreadAlgo.InstrumentConfigInfo);
+            origSpreadAlgo.SetAlgoId(origSpreadAlgo.InstrumentConfigInfo.AlgoId);
+            origSpreadAlgo.PricerConfigInfo.MinSpread = "";
+            origSpreadAlgo.PricerConfigInfo = _mmRest.SavePricer(origSpreadAlgo.PricerConfigInfo);
+            origSpreadAlgo.RiskLimitConfigInfo = _mmRest.SaveRiskLimitsConfig(origSpreadAlgo.RiskLimitConfigInfo);
+            Thread.Sleep(1000);
+
+            //_mmRest.StartInstrument(algo.AlgoId);
+            _mmRest.StartPricer(algo.AlgoId);
+
+            //_mmRest.StartInstrument(origSpreadAlgo.AlgoId);
+            _mmRest.StartPricer(origSpreadAlgo.AlgoId);
+            Thread.Sleep(1000);
+
+            var quotesBookLister = _wsFactory.CreateQuotesSubscription();
+
+            algo.QuoteMessageHandler += _testEvent.CompareSpread;
+            quotesBookLister.Subscribe(origSpreadAlgo.AlgoId, origSpreadAlgo.OnQuoteMessage);
+            Thread.Sleep(2000);
+
+            quotesBookLister.Subscribe(algo.AlgoId, algo.OnQuoteMessage);
+            WaitTestEvents(5);
+
+            // Change pricer
+            PricerConfigDto newPricerConfig = AlgorithmInfo.CreateConfig<PricerConfigDto>("pricer5.json", algo.AlgoId);
+            algo.PricerConfigInfo = _mmRest.SavePricer(newPricerConfig);
+            Debug.WriteLine("Pricer is changed");
+
+            WaitTestEvents(5);
+
+            quotesBookLister.Unsubscribe(algo.AlgoId, algo.OnQuoteMessage);
+            quotesBookLister.Unsubscribe(origSpreadAlgo.AlgoId, origSpreadAlgo.OnQuoteMessage);
+            algo.QuoteMessageHandler -= _testEvent.CompareSpread;
+            Thread.Sleep(1000);
+
+            _mmRest.StopPricer(algo.AlgoId);
+            _mmRest.StopPricer(origSpreadAlgo.AlgoId);
+            //_mmRest.StopInstrument(algo.AlgoId);
+            //_mmRest.StopInstrument(origSpreadAlgo.AlgoId);
+            Thread.Sleep(1000);
+
+            _mmRest.DeleteAlgorithm(algo.AlgoId);
+            _mmRest.DeleteAlgorithm(origSpreadAlgo.AlgoId);
+            Thread.Sleep(1000);
+
+            Assert.AreEqual(true, _mmRest.GetInstrument(algo.AlgoId) == null, "Deleted algorithm doesn't equal to null");
+            Assert.AreEqual(true, _mmRest.GetInstrument(origSpreadAlgo.AlgoId) == null, "Deleted algorithm doesn't equal to null");
+        }
+
+        [TestMethod]
         public void CreateOrderCC()
         {
             Initialize();
             _testEvent.Algorithms[0] = new AlgorithmInfo(_mmRest.GetInstrument(240));
             AlgorithmInfo algo = _testEvent.Algorithms[0];
+
+            Assert.AreEqual(true, algo.InstrumentConfigInfo.Running, "Instrument is not run");
+
             algo.OrderToSend = new OrderDbo() { Destination = "DLTXMM", Quantity = 10, Side = Side.SELL, Type = OrderDbo.OrderType.MARKET, SecurityId = "ETHBTC" };
 
             var executionsListener = _wsFactory.CreateExecutionsSubscription();
@@ -304,6 +361,7 @@ namespace MarketMaker_Api_Tests.Scenario
             algo.TradeStatisticHandler -= _testEvent.MonitorChangesPosition;
         }
 
+        // ---------------------------------------------------------------------------------------------------------------------------------------------------------------
         public void WaitTestEvents(int seconds)
         {
             int currentSecond = 0;

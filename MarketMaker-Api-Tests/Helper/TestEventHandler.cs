@@ -19,10 +19,14 @@ namespace MarketMaker_Api_Tests.Helper
         {
             Algorithms = new List<AlgorithmInfo>();
             TestResult = true;
+            _startTestTime = DateTime.Now;
         }
 
-        private DateTime startTime = DateTime.Now;
-        private bool WaitUpdateTradeStatistics { get; set; }
+        private DateTime _startTestTime;
+        // CurrentPositionSize can be partially updated in the message for trade statistics while all the executions are filled.
+        // Sometimes the next message for trade statistics should be waited for.
+        private DateTime _receivedExecutionsTime = DateTime.MaxValue;
+        private const int WaitCurPosSizeSecs = 3;
         public List<AlgorithmInfo> Algorithms { get; set; }
         public bool TestResult { get; set; }
         public void CompareQuoteAgainstParams(AlgorithmInfo algo)
@@ -30,7 +34,6 @@ namespace MarketMaker_Api_Tests.Helper
             double originalSellQty = algo.PricerConfigInfo.SellQuoteSizes.Split(' ').Sum(x => Double.Parse(x));
             double originalBuyQty = algo.PricerConfigInfo.BuyQuoteSizes.Split(' ').Sum(x => Double.Parse(x));
             double sellQty = 0.0, buyQty = 0.0;
-            double minSellPrice = 0.0, maxBuyPrice = 0.0, spread = 0.0;
 
             int originalSellLevels = algo.PricerConfigInfo.SellQuoteSizes.Split(' ').Length;
             int originalBuyLevels = algo.PricerConfigInfo.BuyQuoteSizes.Split(' ').Length;
@@ -42,19 +45,13 @@ namespace MarketMaker_Api_Tests.Helper
                 {
                     sellQty += ens.Quantity;
                     sellLevels++;
-                    if (ens.Level == 0)
-                        minSellPrice = ens.Price;
                 }
                 if (ens.Side == Side.BUY)
                 {
                     buyQty += ens.Quantity;
                     buyLevels++;
-                    if (ens.Level == 0)
-                        maxBuyPrice = ens.Price;
                 }
             }
-
-            spread = minSellPrice - maxBuyPrice;
 
             Debug.WriteLine("Sell levels: {0}", sellLevels);
             if (Util.CompareDouble(sellQty, originalSellQty))
@@ -68,8 +65,6 @@ namespace MarketMaker_Api_Tests.Helper
             else
                 Debug.WriteLine("Error! Buy Qty: {0}; Original: {1}", buyQty, originalBuyQty);
 
-            Debug.WriteLine("Spread: {0}; MinSpread: {1}", spread, algo.PricerConfigInfo.MinSpread);
-
             CompareTestValues<bool>(true, Util.CompareDouble(sellQty, originalSellQty),
                                     String.Format("Sell qty: {0} is not equal to original qty: {1}", sellQty, originalSellQty));
             CompareTestValues<bool>(true, Util.CompareDouble(buyQty, originalBuyQty),
@@ -78,8 +73,17 @@ namespace MarketMaker_Api_Tests.Helper
                                     String.Format("Sell levels: {0} are not equal to original levels: {1}", sellLevels, originalSellLevels));
             CompareTestValues<int>(originalBuyLevels, buyLevels,
                                     String.Format("Buy levels: {0} are not equal to original levels: {1}", buyLevels, originalBuyLevels));
-            CompareTestValues<bool>(true, spread - algo.PricerConfigInfo.MinSpread >= 0,
-                                    String.Format("Spread from book: {0} is not equal to original spread: {1}", spread, algo.PricerConfigInfo.MinSpread));
+        }
+
+        public void CompareSpread(AlgorithmInfo algo)
+        {
+            double spread = AlgorithmInfo.CalculateSpread(algo.AlgoDictionary[AlgorithmInfo.BookType.QUOTE].Entries);
+            double paramSpread = AlgorithmInfo.GetSpreadFromParams(Algorithms[1].AlgoDictionary[AlgorithmInfo.BookType.QUOTE].Entries, algo.PricerConfigInfo.MinSpread);
+            Debug.WriteLine("Spread: {0}, Parse spread: {1}, MinSpread: {2}", spread, paramSpread, algo.PricerConfigInfo.MinSpread);
+            CompareTestValues(false, Double.IsNaN(paramSpread), "Spread is NAN - no subscription to Source book.");
+
+            CompareTestValues<bool>(true, spread - paramSpread >= 0,
+                                    String.Format("Spread from book: {0} less than original spread: {1}", spread, paramSpread));
         }
 
         public void CompareSourceAgainstTargetBook(AlgorithmInfo algo)
@@ -141,38 +145,48 @@ namespace MarketMaker_Api_Tests.Helper
         public void InitialisePositionSize(AlgorithmInfo algo)
         {
             if (algo.TradeStatistic != null && Double.IsNaN(algo.InitialPositionSize))
-                algo.InitialPositionSize = algo.TradeStatistic.CurrentPositionSize;
+                algo.InitTradeStatistic = algo.TradeStatistic;
         }
 
         public void MonitorChangesPosition(AlgorithmInfo algo)
         {
-            Debug.WriteLine("MonitorChangesPosition, Initial Position Size: {0}", algo.InitialPositionSize);
+            Debug.WriteLine("MonitorChangesPosition, Initial Position Size: {0}, Seconds after received executions {1}",
+                            algo.InitTradeStatistic.CurrentPositionSize, (DateTime.Now - _receivedExecutionsTime).TotalSeconds);
             InitialisePositionSize(algo);
-            if (algo.TradeStatistic != null && !Util.CompareDouble(algo.ChangePositionSize, 0.0))
+            if (algo.TradeStatistic != null && !Util.CompareDouble(algo.ChangePositionSize, 0.0) &&
+               (DateTime.Now - _receivedExecutionsTime).TotalSeconds > WaitCurPosSizeSecs)
             {
-                algo.ChangePositionSize = algo.OrderToSend.Side == Side.BUY
-                    ? -algo.ChangePositionSize
-                    : algo.ChangePositionSize;
-                Debug.WriteLine("Initial position size: {0}, Change size: {1}, Current position size: {2}",
-                                algo.InitialPositionSize, algo.ChangePositionSize, algo.TradeStatistic.CurrentPositionSize);
-                // CurrentPositionSize can be partially updated in the message for trade statistics while all the executions are filled.
-                // Sometimes the next message for trade statistics should be waited for.
-                bool isNeedWaitNextMessage = Util.CompareDouble(algo.InitialPositionSize, algo.TradeStatistic.CurrentPositionSize) ||
-                                             Math.Abs(algo.TradeStatistic.CurrentPositionSize - algo.InitialPositionSize) <
-                                             Math.Abs(algo.ChangePositionSize);
-                if (isNeedWaitNextMessage && !WaitUpdateTradeStatistics)
-                {
-                    WaitUpdateTradeStatistics = true;
-                    return;
-                }
-                WaitUpdateTradeStatistics = false;
+                bool isBuyOrder = algo.OrderToSend.Side == Side.BUY;
+                algo.ChangePositionSize = isBuyOrder ? -algo.ChangePositionSize : algo.ChangePositionSize;
 
-                CompareTestValues(true, Util.CompareDouble(algo.InitialPositionSize + algo.ChangePositionSize, algo.TradeStatistic.CurrentPositionSize),
-                                  "Position Size is different");
+                Debug.WriteLine("Enter inside. Initial position size: {0}, Change size: {1}, Current position size: {2}" +
+                                "TradeSellQty: {3}, TradeBuyQty {4}", algo.InitTradeStatistic.CurrentPositionSize,
+                                 algo.ChangePositionSize, algo.TradeStatistic.CurrentPositionSize,
+                                 algo.InitTradeStatistic.TradeSellQty, algo.InitTradeStatistic.TradeBuyQty);
 
-                algo.InitialPositionSize = algo.TradeStatistic.CurrentPositionSize;
+                CompareTestValues(true, CompareChangesStatistic(algo.InitTradeStatistic.CurrentPositionSize,
+                                  algo.TradeStatistic.CurrentPositionSize, algo.ChangePositionSize),
+                                  "Position Size is different from expected");
+
+                if (isBuyOrder)
+                    CompareTestValues(true,
+                        CompareChangesStatistic(algo.InitTradeStatistic.TradeSellQty, algo.TradeStatistic.TradeSellQty,
+                            Math.Abs(algo.ChangePositionSize)),
+                        "Trade Sell Qty is different");
+                else
+                    CompareTestValues(true,
+                        CompareChangesStatistic(algo.InitTradeStatistic.TradeBuyQty, algo.TradeStatistic.TradeBuyQty,
+                            Math.Abs(algo.ChangePositionSize)),
+                        "Trade Buy Qty is different");
+
+                algo.InitTradeStatistic = (AlgoInstrumentStatisticsDto)algo.TradeStatistic.Clone();
                 algo.ChangePositionSize = 0.0;
             }
+        }
+
+        public bool CompareChangesStatistic(double init, double current, double change)
+        {
+            return Util.CompareDouble(init + change, current);
         }
 
         public void CalculateSizeExecutions(AlgorithmInfo algo)
@@ -180,11 +194,11 @@ namespace MarketMaker_Api_Tests.Helper
             Debug.WriteLine("CalculateSizeExecutions, Executions count: {0}", algo.Executions.Count);
 
             algo.ChangePositionSize = 0.0;
-            DateTime newTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Local);
+            DateTime newTime = DateTime.MinValue;
             foreach (var exec in algo.Executions)
             {
                 DateTime execTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(exec.Timestamp).ToLocalTime();
-                if (execTime > startTime)
+                if (execTime > _startTestTime)
                 {
                     algo.ChangePositionSize += exec.ExecutionSize;
                     newTime = execTime > newTime ? execTime : newTime;
@@ -196,7 +210,7 @@ namespace MarketMaker_Api_Tests.Helper
             if (Util.CompareDouble(algo.ChangePositionSize, 0.0))
                 return;
 
-            //startTime = newTime;
+            _startTestTime = newTime;
             double maxExecutionsSizeFromParams = algo.OrderToSend.Side == Side.BUY ? AlgorithmInfo.GetQuoteSize(algo.PricerConfigInfo.SellQuoteSizes)
                                                                         : AlgorithmInfo.GetQuoteSize(algo.PricerConfigInfo.BuyQuoteSizes);
             double maxExecutionsSize = algo.OrderToSend.Quantity <= maxExecutionsSizeFromParams ?
@@ -204,6 +218,7 @@ namespace MarketMaker_Api_Tests.Helper
             CompareTestValues(true, Math.Abs(maxExecutionsSize - algo.ChangePositionSize) < Util.delta,
                                     String.Format("Size of executions exceeds the allowable. Summary size of executions: {0}, Allowable size: {1}",
                                     algo.ChangePositionSize, maxExecutionsSize));
+            _receivedExecutionsTime = DateTime.Now;
         }
 
         public void CheckWebSocketStatus(string status)

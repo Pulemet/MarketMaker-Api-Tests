@@ -11,7 +11,8 @@ namespace MarketMaker_Api_Tests
     public class Util
     {
         public static string paramsFolder = @"D:\MarketMaker\params\";
-        public static double delta = 1e-10;
+        public const double delta = 1e-10;
+        public const double bps = 1e-4;
         public static string ReadFile(string fileName)
         {
             string line = "";
@@ -32,6 +33,7 @@ namespace MarketMaker_Api_Tests
 
         public static bool CompareDouble(double first, double second)
         {
+            //Debug.WriteLine("First: {0}, Second: {1}", first, second);
             return Math.Abs(first - second) < delta;
         }
     }

@@ -22,6 +22,7 @@ namespace MarketMaker_Api_Tests.Helper
             AlgoDictionary = new Dictionary<BookType, L2PackageDto>();
             IsDelete = false;
             InitialPositionSize = Double.NaN;
+            InitTradeStatistic = null;
         }
 
         public AlgorithmInfo(string fileInstrument, string filePricer, string fileHeadger, string fileRiskLimit) : this()
@@ -43,6 +44,9 @@ namespace MarketMaker_Api_Tests.Helper
         }
 
         private bool IsDelete { get; set; }
+        //Переделать в объект AlgoInstrumentStatisticsDto
+        //
+        //
         public double InitialPositionSize { get; set; }
         public double ChangePositionSize { get; set; }
         public OrderDbo OrderToSend { get; set; }
@@ -61,9 +65,8 @@ namespace MarketMaker_Api_Tests.Helper
         }
 
         public Dictionary<BookType, L2PackageDto> AlgoDictionary { get; set; }
-
+        public AlgoInstrumentStatisticsDto InitTradeStatistic { get; set; }
         public AlgoInstrumentStatisticsDto TradeStatistic { get; set; }
-
         public List<ExecutionDto> Executions { get; set; }
 
         public static T CreateConfig<T>(string fileName, long id)
@@ -181,6 +184,53 @@ namespace MarketMaker_Api_Tests.Helper
             }
 
             return quote.Split(' ').Sum(x => Double.Parse(x));
+        }
+
+        public static double GetSpreadFromParams(List<L2EntryDto> book, string paramSpread)
+        {
+            string spread = paramSpread.Trim(' ');
+            int index = spread.IndexOf("bps", StringComparison.OrdinalIgnoreCase);
+            if (index > 0)
+            {
+                return CalculateBps(book) * Double.Parse(spread.Substring(0, index));
+            }
+            return Double.Parse(spread);
+        }
+
+        public static double CalculateBps(List<L2EntryDto> book)
+        {
+            return CalculateMidPrice(book) * Util.bps;
+        }
+
+        public static double CalculateMidPrice(List<L2EntryDto> book)
+        {
+            double summary = 0;
+            double count = 0;
+            foreach (var entry in book)
+            {
+                summary += entry.Quantity * entry.Price;
+                count += entry.Quantity;
+            }
+            return summary / count;
+        }
+
+        public static double CalculateSpread(List<L2EntryDto> book)
+        {
+            double minSellPrice = 0.0, maxBuyPrice = 0.0;
+            foreach (var entry in book)
+            {
+                if (entry.Side == Side.SELL)
+                {
+                    if (entry.Level == 0)
+                        minSellPrice = entry.Price;
+                }
+                if (entry.Side == Side.BUY)
+                {
+                    if (entry.Level == 0)
+                        maxBuyPrice = entry.Price;
+                }
+            }
+            return minSellPrice - maxBuyPrice;
         }
 
         public delegate void OnMessageHandler(AlgorithmInfo algo);
