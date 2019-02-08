@@ -11,12 +11,12 @@ using WebSocketSharp;
 
 namespace MarketMaker_Api_Tests.CriptoCortex
 {
-    class StompWebSocketServiceCC : StompWebSocketService
+    public class StompWebSocketServiceCrypto : StompWebSocketService
     {
         protected const string statusPrefix = "status:";
         protected const int statusPrefixLength = 7;
 
-        public StompWebSocketServiceCC(string url, string token)
+        public StompWebSocketServiceCrypto(string url, string token)
             : base(url, token) { }
 
         public void SendMessage(string message)

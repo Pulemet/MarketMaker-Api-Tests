@@ -64,8 +64,8 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="CryptoCortex\Models\OrderDbo.cs" />
-    <Compile Include="CryptoCortex\StompWebSocketServiceCC.cs" />
+    <Compile Include="CryptoCortex\Models\OrderCrypto.cs" />
+    <Compile Include="CryptoCortex\StompWebSocketServiceCrypto.cs" />
     <Compile Include="Helper\AlgorithmInfo.cs" />
     <Compile Include="Helper\TestEventHandler.cs" />
     <Compile Include="Program.cs" />

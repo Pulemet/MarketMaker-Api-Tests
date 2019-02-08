@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -14,6 +15,13 @@ using Newtonsoft.Json;
 
 namespace MarketMaker_Api_Tests.Helper
 {
+    public enum BookType
+    {
+        TARGET,
+        QUOTE,
+        SOURCE,
+        HEDGE,
+    }
     public class AlgorithmInfo
     {
         public AlgorithmInfo()
@@ -21,16 +29,17 @@ namespace MarketMaker_Api_Tests.Helper
             AlgoId = -1;
             AlgoDictionary = new Dictionary<BookType, L2PackageDto>();
             IsDelete = false;
-            InitialPositionSize = Double.NaN;
             InitTradeStatistic = null;
+            Executions = new List<ExecutionDto>();
+            Orders = new List<OrderDto>();
         }
 
         public AlgorithmInfo(string fileInstrument, string filePricer, string fileHeadger, string fileRiskLimit) : this()
         {
-            InstrumentConfigInfo = JsonConvert.DeserializeObject<InstrumentConfigDto>(Util.ReadFile(Util.paramsFolder + fileInstrument));
-            PricerConfigInfo = JsonConvert.DeserializeObject<PricerConfigDto>(Util.ReadFile(Util.paramsFolder + filePricer));
-            HedgerConfigInfo = JsonConvert.DeserializeObject<HedgerConfigDto>(Util.ReadFile(Util.paramsFolder + fileHeadger));
-            RiskLimitConfigInfo = JsonConvert.DeserializeObject<RiskLimitsConfigDto>(Util.ReadFile(Util.paramsFolder + fileRiskLimit));
+            InstrumentConfigInfo = JsonConvert.DeserializeObject<InstrumentConfigDto>(Util.ReadFile(Util.ParamsFolder + fileInstrument));
+            PricerConfigInfo = JsonConvert.DeserializeObject<PricerConfigDto>(Util.ReadFile(Util.ParamsFolder + filePricer));
+            HedgerConfigInfo = JsonConvert.DeserializeObject<HedgerConfigDto>(Util.ReadFile(Util.ParamsFolder + fileHeadger));
+            RiskLimitConfigInfo = JsonConvert.DeserializeObject<RiskLimitsConfigDto>(Util.ReadFile(Util.ParamsFolder + fileRiskLimit));
             IsDelete = true;
         }
 
@@ -44,34 +53,26 @@ namespace MarketMaker_Api_Tests.Helper
         }
 
         private bool IsDelete { get; set; }
-        //Переделать в объект AlgoInstrumentStatisticsDto
-        //
-        //
-        public double InitialPositionSize { get; set; }
         public double ChangePositionSize { get; set; }
-        public OrderDbo OrderToSend { get; set; }
+        public OrderCrypto OrderToSend { get; set; }
         public long AlgoId { get; set; }
         public InstrumentConfigDto InstrumentConfigInfo { get; set; }
         public PricerConfigDto PricerConfigInfo { get; set; }
         public HedgerConfigDto HedgerConfigInfo { get; set; }
         public RiskLimitsConfigDto RiskLimitConfigInfo { get; set; }
 
-        public enum BookType
-        {
-            TARGET,
-            QUOTE,
-            SOURCE,
-            HEDGE,
-        }
-
         public Dictionary<BookType, L2PackageDto> AlgoDictionary { get; set; }
         public AlgoInstrumentStatisticsDto InitTradeStatistic { get; set; }
         public AlgoInstrumentStatisticsDto TradeStatistic { get; set; }
         public List<ExecutionDto> Executions { get; set; }
+        public List<OrderDto> Orders { get; set; }
+        public double OrdersBuyQty { get; set; }
+        public double OrdersSellQty { get; set; }
+        public bool isChangedOrders { get; set; }
 
         public static T CreateConfig<T>(string fileName, long id)
         {
-            var config = JsonConvert.DeserializeObject<T>(Util.ReadFile(Util.paramsFolder + fileName));
+            var config = JsonConvert.DeserializeObject<T>(Util.ReadFile(Util.ParamsFolder + fileName));
             var type = typeof(T);
             var property = type.GetProperty("AlgoId");
             property?.SetValue(config, id);
@@ -199,7 +200,7 @@ namespace MarketMaker_Api_Tests.Helper
 
         public static double CalculateBps(List<L2EntryDto> book)
         {
-            return CalculateMidPrice(book) * Util.bps;
+            return CalculateMidPrice(book) * Util.Bps;
         }
 
         public static double CalculateMidPrice(List<L2EntryDto> book)
@@ -211,12 +212,12 @@ namespace MarketMaker_Api_Tests.Helper
                 summary += entry.Quantity * entry.Price;
                 count += entry.Quantity;
             }
-            return summary / count;
+            return Math.Round(summary / count, Util.OrderPricePrecision);
         }
 
         public static double CalculateSpread(List<L2EntryDto> book)
         {
-            double minSellPrice = 0.0, maxBuyPrice = 0.0;
+            double minSellPrice = 0, maxBuyPrice = 0;
             foreach (var entry in book)
             {
                 if (entry.Side == Side.SELL)
@@ -230,6 +231,7 @@ namespace MarketMaker_Api_Tests.Helper
                         maxBuyPrice = entry.Price;
                 }
             }
+            Debug.WriteLine("Min Sll Price: {0}, Max Buy Price: {1}", minSellPrice, maxBuyPrice);
             return minSellPrice - maxBuyPrice;
         }
 
@@ -241,6 +243,7 @@ namespace MarketMaker_Api_Tests.Helper
         public event OnMessageHandler TargetMessageHandler;
         public event OnMessageHandler TradeStatisticHandler;
         public event OnMessageHandler ExecutionsHandler;
+        public event OnMessageHandler OrdersHandler;
 
         public void OnQuoteMessage(L2PackageDto l2Book)
         {
@@ -287,6 +290,58 @@ namespace MarketMaker_Api_Tests.Helper
             if(Executions == null)
                 return;
             ExecutionsHandler?.Invoke(this);
+        }
+
+        public void OnOrderMessage(OrderDto[] orders)
+        {
+            if (orders == null)
+                return;
+            ReplaceOrders(new List<OrderDto>(orders));
+            OrdersHandler?.Invoke(this);
+        }
+
+        private void ReplaceOrders(List<OrderDto> orders)
+        {
+            isChangedOrders = false;
+            foreach (var order in orders)
+            {
+                bool isExists = false;
+                for (int i = 0; i < Orders.Count; i++)
+                {
+                    if (order.CorrelationId == Orders[i].CorrelationId)
+                    {
+                        isChangedOrders = isChangedOrders || !Orders[i].EqualsExceptPrice(order);
+                        Orders[i] = (OrderDto)order.Clone();
+                        isExists = true;
+                        break;
+                    }
+                }
+                if (!isExists)
+                {
+                    Orders.Add(order);
+                    isChangedOrders = true;
+                }     
+            }
+        }
+
+        public void CalculateOrdersQty()
+        {
+            OrdersBuyQty = 0;
+            OrdersSellQty = 0;
+            foreach (var order in Orders)
+            {
+                if (order.OrderStatus == OrderStatus.PARTIALLY_FILLED || order.OrderStatus == OrderStatus.NEW)
+                {
+                    if (order.Side == Side.BUY)
+                    {
+                        OrdersBuyQty += order.Size - order.ExecutedSize;
+                    }
+                    if (order.Side == Side.SELL)
+                    {
+                        OrdersSellQty += order.Size - order.ExecutedSize;
+                    }
+                }
+            }
         }
     }
 }

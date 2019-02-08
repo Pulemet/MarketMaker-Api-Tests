@@ -11,14 +11,14 @@ using Newtonsoft.Json.Serialization;
 
 namespace MarketMaker_Api_Tests.CryptoCortex.Models
 {
-    public class OrderDbo
+    public enum OrderType
     {
-        public enum OrderType
-        {
-            MARKET,
-            LIMIT
-        }
+        MARKET,
+        LIMIT
+    }
 
+    public class OrderCrypto
+    {
         internal class EnumConverter : StringEnumConverter
         {
             public EnumConverter() : base(new SnakeCaseNamingStrategy(), false)
