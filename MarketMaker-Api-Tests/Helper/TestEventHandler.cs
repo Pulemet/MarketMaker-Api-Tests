@@ -26,7 +26,7 @@ namespace MarketMaker_Api_Tests.Helper
         // CurrentPositionSize can be partially updated in the message for trade statistics while all the executions are filled.
         // Sometimes the next message for trade statistics should be waited for.
         private DateTime _receivedTime = DateTime.MaxValue;
-        private const int WaitCurPosSizeSecs = 3;
+        private const int WaitAction = 3;
         public List<AlgorithmInfo> Algorithms { get; set; }
         public bool TestResult { get; set; }
         public void CompareQuoteAgainstParams(AlgorithmInfo algo)
@@ -77,21 +77,23 @@ namespace MarketMaker_Api_Tests.Helper
 
         public void CompareSpread(AlgorithmInfo algo)
         {
-            if((DateTime.Now - StartTestTime).TotalSeconds < 2)
+            if((DateTime.Now - StartTestTime).TotalSeconds < WaitAction)
                 return;
             double quoteSpread = AlgorithmInfo.CalculateSpread(algo.AlgoDictionary[BookType.QUOTE].Entries);
             double targetSpread = AlgorithmInfo.CalculateSpread(algo.AlgoDictionary[BookType.TARGET].Entries);
-            double paramSpread = AlgorithmInfo.GetSpreadFromParams(Algorithms[1].AlgoDictionary[BookType.QUOTE].Entries, algo.PricerConfigInfo.MinSpread);
+            double paramSpread = AlgorithmInfo.GetSpreadFromParams(null, algo.PricerConfigInfo.MinSpread);
             Debug.WriteLine("Quote Spread: {0}, Target Spread: {1}, Parse spread: {2}, MinSpread: {3}",
                             quoteSpread, targetSpread, paramSpread, algo.PricerConfigInfo.MinSpread);
 
-            CompareTestValues<bool>(true, quoteSpread - paramSpread >= -Util.Delta && targetSpread - paramSpread >= -Util.Delta,
-                                    String.Format("Spread from book: {0} less than original spread: {1}", quoteSpread, paramSpread));
+            CompareTestValues(true, quoteSpread - paramSpread >= -Util.Delta && targetSpread - paramSpread >= -Util.Delta,
+                                    String.Format("Spreads from Quotes book: {0} and Target book: {1} are less than original spread: {2}", quoteSpread, targetSpread, paramSpread));
         }
 
         public void CompareSourceAgainstTargetBook(AlgorithmInfo algo)
         {
-            CompareTestValues<bool>(true, algo.AlgoDictionary.ContainsKey(BookType.SOURCE) &&
+            if ((DateTime.Now - StartTestTime).TotalSeconds < WaitAction)
+                return;
+            CompareTestValues(true, algo.AlgoDictionary.ContainsKey(BookType.SOURCE) &&
                                           Algorithms[0].AlgoDictionary.ContainsKey(BookType.TARGET),
                                           "Book is NULL!");
             CompareBooks(algo.AlgoDictionary[BookType.SOURCE],
@@ -100,7 +102,7 @@ namespace MarketMaker_Api_Tests.Helper
 
         public void CompareStatisticAgainstTargetBook(AlgorithmInfo algo)
         {
-            CompareTestValues<bool>(true, algo.AlgoDictionary.ContainsKey(BookType.TARGET) && algo.TradeStatistic != null,
+            CompareTestValues(true, algo.AlgoDictionary.ContainsKey(BookType.TARGET) && algo.TradeStatistic != null,
                                     "Data is NULL");
 
             double sellQty = 0, buyQty = 0;
@@ -118,9 +120,9 @@ namespace MarketMaker_Api_Tests.Helper
             Debug.WriteLine("Trade Statistic Sell Qty: {0}, Target book: {1}", algo.TradeStatistic.OpenSellQty, sellQty);
             Debug.WriteLine("Trade Statistic Buy Qty: {0}, Target book: {1}", algo.TradeStatistic.OpenBuyQty, buyQty);
 
-            CompareTestValues<bool>(true, Util.CompareDouble(algo.TradeStatistic.OpenBuyQty, buyQty),
+            CompareTestValues(true, Util.CompareDouble(algo.TradeStatistic.OpenBuyQty, buyQty),
                             String.Format("Buy Qty doesn't matched. OpenSellQty: {0}, Sell Qty from book: {1}", algo.TradeStatistic.OpenBuyQty, buyQty));
-            CompareTestValues<bool>(true, Util.CompareDouble(algo.TradeStatistic.OpenSellQty, sellQty),
+            CompareTestValues(true, Util.CompareDouble(algo.TradeStatistic.OpenSellQty, sellQty),
                             String.Format("Sell Qty doesn't matched. OpenBuyQty: {0}, Buy Qty from book: {1}", algo.TradeStatistic.OpenSellQty, sellQty));
         }
 
@@ -128,14 +130,14 @@ namespace MarketMaker_Api_Tests.Helper
         {
             Debug.WriteLine("Number Source: {0}, Target: {1}", sourceBook.SequenceNumber, targetBook.SequenceNumber);
             Debug.WriteLine("Count of levels. Source {0}, Target: {1}", sourceBook.Entries.Count, targetBook.Entries.Count);
-            CompareTestValues<int>(sourceBook.Entries.Count, targetBook.Entries.Count,
+            CompareTestValues(sourceBook.Entries.Count, targetBook.Entries.Count,
                                    String.Format("Count of levels is not equal. Source {0}, Quotes: {1}", sourceBook.Entries.Count, targetBook.Entries.Count));
 
             foreach (var level in sourceBook.Entries)
             {
                 var targetLevel = targetBook.Entries.FirstOrDefault(l => l.Side == level.Side && l.Level == level.Level);
 
-                CompareTestValues<bool>(true, targetLevel != null, String.Format("Level {0} doesn't exist for {1}", level.Level, level.Side));
+                CompareTestValues(true, targetLevel != null, String.Format("Level {0} doesn't exist for {1}", level.Level, level.Side));
 
                 Debug.WriteLine("Side {3} Level {0}. Source {1}; Target: {2}", level.Level, level.Quantity, targetLevel.Quantity, targetLevel.Side);
 
@@ -157,7 +159,7 @@ namespace MarketMaker_Api_Tests.Helper
             Debug.WriteLine("MonitorChangesPosition, Initial Position Size: {0}, Seconds after received executions {1}",
                             algo.InitTradeStatistic.CurrentPositionSize, (DateTime.Now - _receivedTime).TotalSeconds);
             if (algo.TradeStatistic != null && !Util.CompareDouble(algo.ChangePositionSize, 0.0) &&
-               (DateTime.Now - _receivedTime).TotalSeconds > WaitCurPosSizeSecs)
+               (DateTime.Now - _receivedTime).TotalSeconds > WaitAction)
             {
                 bool isBuyOrder = algo.OrderToSend.Side == Side.BUY;
                 algo.ChangePositionSize = isBuyOrder ? -algo.ChangePositionSize : algo.ChangePositionSize;
@@ -232,7 +234,7 @@ namespace MarketMaker_Api_Tests.Helper
             Debug.WriteLine("Open Buy Qty: {0}, Orders Buy Qty: {1}, Open Sell Qty: {2}, Orders Sell Qty: {3}",
                 algo.TradeStatistic.OpenBuyQty, algo.OrdersBuyQty, algo.TradeStatistic.OpenSellQty, algo.OrdersSellQty);
 
-            if ((DateTime.Now - _receivedTime).TotalSeconds < WaitCurPosSizeSecs)
+            if ((DateTime.Now - _receivedTime).TotalSeconds < WaitAction)
                 return;
 
             Debug.WriteLine("Enter inside");

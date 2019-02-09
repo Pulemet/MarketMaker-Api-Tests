@@ -67,12 +67,16 @@
     <Compile Include="CryptoCortex\Models\OrderCrypto.cs" />
     <Compile Include="CryptoCortex\StompWebSocketServiceCrypto.cs" />
     <Compile Include="Helper\AlgorithmInfo.cs" />
+    <Compile Include="CryptoCortex\CryptoCortexRest.cs" />
+    <Compile Include="Helper\MarketMakerRest.cs" />
     <Compile Include="Helper\TestEventHandler.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RealtimeTests\CostEngine.cs" />
+    <Compile Include="RealtimeTests\SpreadObserver.cs" />
     <Compile Include="Scenario\Risk.cs" />
     <Compile Include="Scenario\Trading.cs" />
-    <Compile Include="Util.cs" />
+    <Compile Include="Helper\Util.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

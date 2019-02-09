@@ -193,9 +193,11 @@ namespace MarketMaker_Api_Tests.Helper
             int index = spread.IndexOf("bps", StringComparison.OrdinalIgnoreCase);
             if (index > 0)
             {
-                return CalculateBps(book) * Double.Parse(spread.Substring(0, index));
+                if(book != null)
+                    return Math.Round(CalculateBps(book) * Double.Parse(spread.Substring(0, index)), Util.OrderPricePrecision);
+                return 0;
             }
-            return Double.Parse(spread);
+            return Math.Round(Double.Parse(spread), Util.OrderPricePrecision);
         }
 
         public static double CalculateBps(List<L2EntryDto> book)
@@ -213,6 +215,23 @@ namespace MarketMaker_Api_Tests.Helper
                 count += entry.Quantity;
             }
             return Math.Round(summary / count, Util.OrderPricePrecision);
+            /*
+            double minSellPrice = 0, maxBuyPrice = 0;
+            foreach (var entry in book)
+            {
+                if (entry.Side == Side.SELL)
+                {
+                    if (entry.Level == 0)
+                        minSellPrice = entry.Price;
+                }
+                if (entry.Side == Side.BUY)
+                {
+                    if (entry.Level == 0)
+                        maxBuyPrice = entry.Price;
+                }
+            }
+            return (minSellPrice + maxBuyPrice) / 2;
+            */
         }
 
         public static double CalculateSpread(List<L2EntryDto> book)
@@ -231,8 +250,8 @@ namespace MarketMaker_Api_Tests.Helper
                         maxBuyPrice = entry.Price;
                 }
             }
-            Debug.WriteLine("Min Sll Price: {0}, Max Buy Price: {1}", minSellPrice, maxBuyPrice);
-            return minSellPrice - maxBuyPrice;
+            Debug.WriteLine("Min Sell Price: {0}, Max Buy Price: {1}", minSellPrice, maxBuyPrice);
+            return Math.Round(minSellPrice - maxBuyPrice, Util.OrderPricePrecision);
         }
 
         public delegate void OnMessageHandler(AlgorithmInfo algo);
