@@ -77,7 +77,7 @@ namespace MarketMaker_Api_Tests.Helper
 
         public void CompareSpread(AlgorithmInfo algo)
         {
-            if((DateTime.Now - StartTestTime).TotalSeconds < WaitAction)
+            if((DateTime.Now - StartTestTime).TotalSeconds < WaitAction || !algo.AlgoDictionary.ContainsKey(BookType.TARGET))
                 return;
             double quoteSpread = AlgorithmInfo.CalculateSpread(algo.AlgoDictionary[BookType.QUOTE].Entries);
             double targetSpread = AlgorithmInfo.CalculateSpread(algo.AlgoDictionary[BookType.TARGET].Entries);
@@ -177,12 +177,12 @@ namespace MarketMaker_Api_Tests.Helper
                     CompareTestValues(true,
                         CompareChangesStatistic(algo.InitTradeStatistic.TradeSellQty, algo.TradeStatistic.TradeSellQty,
                             Math.Abs(algo.ChangePositionSize)),
-                        "Trade Sell Qty is different");
+                        "Trade Sell Qty is different from expected");
                 else
                     CompareTestValues(true,
                         CompareChangesStatistic(algo.InitTradeStatistic.TradeBuyQty, algo.TradeStatistic.TradeBuyQty,
                             Math.Abs(algo.ChangePositionSize)),
-                        "Trade Buy Qty is different");
+                        "Trade Buy Qty is different from expected");
 
                 algo.InitTradeStatistic = (AlgoInstrumentStatisticsDto)algo.TradeStatistic.Clone();
                 algo.ChangePositionSize = 0;

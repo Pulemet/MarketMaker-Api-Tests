@@ -386,6 +386,7 @@ namespace MarketMaker_Api_Tests.Scenario
             Thread.Sleep(1000);
 
             algo.OrderToSend = new OrderCrypto() { Destination = "DLTXMM", Quantity = 5, Side = Side.BUY, Type = OrderType.MARKET, SecurityId = "ETHBTC" };
+            var wsCrypto = ConnectToCrypto();
 
             var executionsListener = _wsFactory.CreateExecutionsSubscription();
             var tradeStatisticListener = _wsFactory.CreateTradingStatisticsSubscription();
@@ -398,7 +399,6 @@ namespace MarketMaker_Api_Tests.Scenario
 
             WaitTestEvents(2);
 
-            var wsCrypto = ConnectToCrypto();
             Thread.Sleep(500);
 
             // Buy Order
