@@ -67,8 +67,7 @@
     <Compile Include="CryptoCortex\Models\OrderCrypto.cs" />
     <Compile Include="CryptoCortex\StompWebSocketServiceCrypto.cs" />
     <Compile Include="Helper\AlgorithmInfo.cs" />
-    <Compile Include="CryptoCortex\CryptoCortexRest.cs" />
-    <Compile Include="Helper\MarketMakerRest.cs" />
+    <Compile Include="MarketMakerRest.cs" />
     <Compile Include="Helper\TestEventHandler.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
