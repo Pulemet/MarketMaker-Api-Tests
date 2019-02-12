@@ -391,7 +391,7 @@ namespace MarketMaker_Api_Tests.Scenario
             var executionsListener = _wsFactory.CreateExecutionsSubscription();
             var tradeStatisticListener = _wsFactory.CreateTradingStatisticsSubscription();
 
-            algo.ExecutionsHandler += _testEvent.CalculateSizeExecutions;
+            algo.ExecutionsHandler += _testEvent.CalculateExecutions;
             executionsListener.Subscribe(algo.AlgoId, algo.OnExecutionMessage);
 
             algo.TradeStatisticHandler += _testEvent.MonitorChangesPosition;
@@ -412,6 +412,67 @@ namespace MarketMaker_Api_Tests.Scenario
 
             executionsListener.Unsubscribe(algo.AlgoId, algo.OnExecutionMessage);
             algo.ExecutionsHandler -= _testEvent.CompareStatisticAgainstTargetBook;
+            Thread.Sleep(500);
+
+            tradeStatisticListener.Unsubscribe(algo.OnTradeStatisticMessage);
+            algo.TradeStatisticHandler -= _testEvent.MonitorChangesPosition;
+            Thread.Sleep(500);
+
+            _mmRest.StopPricer(algo.AlgoId);
+            _mmRest.StopInstrument(algo.AlgoId);
+            Thread.Sleep(500);
+
+            _mmRest.DeleteAlgorithm(algo.AlgoId);
+            Thread.Sleep(500);
+
+            Assert.AreEqual(true, _mmRest.GetInstrument(algo.AlgoId) == null, "Deleted algorithm doesn't equal to null");
+            Assert.AreEqual(true, _testEvent.TestResult, TestFail);
+        }
+
+        [TestMethod]
+        public void CompareAlertsAgainstTradeQty()
+        {
+            Initialize();
+            //_testEvent.Algorithms[0] = new AlgorithmInfo(_mmRest.GetInstrument(240));
+            AlgorithmInfo algo = _testEvent.Algorithms[0];
+            algo.InstrumentConfigInfo = _mmRest.CreateInstrument(algo.InstrumentConfigInfo);
+            algo.PricerConfigInfo = AlgorithmInfo.CreateConfig<PricerConfigDto>("pricer6.json", algo.AlgoId);
+            algo.SetAlgoId(algo.InstrumentConfigInfo.AlgoId);
+            algo.PricerConfigInfo = _mmRest.SavePricer(algo.PricerConfigInfo);
+            algo.RiskLimitConfigInfo = _mmRest.SaveRiskLimitsConfig(algo.RiskLimitConfigInfo);
+
+            _mmRest.StartPricer(algo.AlgoId);
+            _mmRest.StartInstrument(algo.AlgoId);
+
+            Thread.Sleep(1000);
+
+            algo.OrderToSend = new OrderCrypto() { Destination = "DLTXMM", Quantity = 5, Side = Side.BUY, Type = OrderType.MARKET, SecurityId = "ETHBTC" };
+            var wsCrypto = ConnectToCrypto();
+
+            var alertsListener = _wsFactory.CreateAlertsSubscription();
+            var tradeStatisticListener = _wsFactory.CreateTradingStatisticsSubscription();
+
+            algo.AlertsHandler += _testEvent.CalculateExecutionsFromAlerts;
+            alertsListener.Subscribe(algo.OnAlertMessage);
+
+            algo.TradeStatisticHandler += _testEvent.MonitorChangesPosition;
+            tradeStatisticListener.Subscribe(algo.OnTradeStatisticMessage);
+
+            WaitTestEvents(2);
+
+            Thread.Sleep(500);
+
+            // Buy Order
+            wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            WaitTestEvents(5);
+
+            algo.OrderToSend.Side = Side.SELL;
+            // Sell Order
+            wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            WaitTestEvents(5);
+  
+            alertsListener.Unsubscribe(algo.OnAlertMessage);
+            algo.AlertsHandler -= _testEvent.CalculateExecutionsFromAlerts;
             Thread.Sleep(500);
 
             tradeStatisticListener.Unsubscribe(algo.OnTradeStatisticMessage);

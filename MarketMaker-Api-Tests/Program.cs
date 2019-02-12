@@ -28,10 +28,12 @@ namespace MarketMaker_Api_Tests
 
         static void Main(string[] args)
         {
-            MarketMakerRest restEngine = new MarketMakerRest();
-            _testEvent = new TestEventHandler();
-            _testEvent.Algorithms.Add(new AlgorithmInfo(restEngine.RestService.GetInstrument(AlgoId1)));
-            _testEvent.Algorithms[0].AlgoId = AlgoId1;
+            string test = "Execution: ETHBTC BUY 0.7 @ 0.03318805 (DLTXMM)";
+            Console.WriteLine(AlgorithmInfo.GetExecutionSizeFromAlert(test));
+            //MarketMakerRest restEngine = new MarketMakerRest();
+            //_testEvent = new TestEventHandler();
+            //_testEvent.Algorithms.Add(new AlgorithmInfo(restEngine.RestService.GetInstrument(AlgoId1)));
+            //_testEvent.Algorithms[0].AlgoId = AlgoId1;
 
             /* Start spreadObserver
             _testEvent.Algorithms.Add(new AlgorithmInfo(_mmRest.GetInstrument(AlgoId2)));
@@ -40,13 +42,13 @@ namespace MarketMaker_Api_Tests
             spreadObserver.Observe();
             */
 
-            CostEngine costEngine = new CostEngine(restEngine.WebSocketService, _testEvent.Algorithms[0]);
-            costEngine.Start();
+            //CostEngine costEngine = new CostEngine(restEngine.WebSocketService, _testEvent.Algorithms[0]);
+            //costEngine.Start();
 
             //var quotesBookLister = _wsFactory.CreateQuotesSubscription();
             //quotesBookLister.Subscribe(AlgoId, PrintSpread);
 
-            //Console.ReadLine();
+            Console.ReadLine();
 
             //quotesBookLister.Unsubscribe(AlgoId, PrintSpread);
         }

@@ -194,11 +194,12 @@ namespace MarketMaker_Api_Tests.Helper
             return Util.CompareDouble(init + change, current);
         }
 
-        public void CalculateSizeExecutions(AlgorithmInfo algo)
+        public void CalculateExecutions(AlgorithmInfo algo)
         {
-            Debug.WriteLine("CalculateSizeExecutions, Executions count: {0}", algo.Executions.Count);
+            Debug.WriteLine("CalculateExecutions, Number of executions: {0}", algo.Executions.Count);
 
             algo.ChangePositionSize = 0;
+
             DateTime newTime = DateTime.MinValue;
             foreach (var exec in algo.Executions)
             {
@@ -210,6 +211,32 @@ namespace MarketMaker_Api_Tests.Helper
                     //Debug.WriteLine(exec.OrderCorrelationId);
                 }
             }
+
+            CalculateSizeExecutions(algo, newTime);
+        }
+
+        public void CalculateExecutionsFromAlerts(AlgorithmInfo algo)
+        {
+            Debug.WriteLine("CalculateExecutionsFromAlerts, Number of alerts for executions : {0}", algo.Alerts.Count);
+
+            algo.ChangePositionSize = 0;
+
+            DateTime newTime = DateTime.MinValue;
+            foreach (var alert in algo.Alerts)
+            {
+                DateTime execTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(alert.Timestamp).ToLocalTime();
+                if (execTime > StartTestTime)
+                {
+                    algo.ChangePositionSize += AlgorithmInfo.GetExecutionSizeFromAlert(alert.Description);
+                    newTime = execTime > newTime ? execTime : newTime;
+                }
+            }
+
+            CalculateSizeExecutions(algo, newTime);
+        }
+
+        public void CalculateSizeExecutions(AlgorithmInfo algo, DateTime newTime)
+        {
             Debug.WriteLine("Summary executions size: {0}", algo.ChangePositionSize);
 
             if (Util.CompareDouble(algo.ChangePositionSize, 0))
@@ -220,8 +247,8 @@ namespace MarketMaker_Api_Tests.Helper
                                                                         : AlgorithmInfo.GetQuoteSize(algo.PricerConfigInfo.BuyQuoteSizes);
             double maxExecutionsSize = algo.OrderToSend.Quantity <= maxExecutionsSizeFromParams ?
                                        algo.OrderToSend.Quantity : maxExecutionsSizeFromParams;
-            CompareTestValues(true, Math.Abs(maxExecutionsSize - algo.ChangePositionSize) < Util.Delta,
-                                    String.Format("Size of executions exceeds the allowable. Summary size of executions: {0}, Allowable size: {1}",
+            CompareTestValues(true, Math.Abs(algo.ChangePositionSize - algo.ChangePositionSize) < Util.Delta,
+                                    String.Format("Size of executions doesn't match with expected. Summary size of executions: {0}, Allowable size: {1}",
                                     algo.ChangePositionSize, maxExecutionsSize));
             _receivedTime = DateTime.Now;
         }
@@ -247,8 +274,8 @@ namespace MarketMaker_Api_Tests.Helper
 
         public void CalculateSizeOrders(AlgorithmInfo algo)
         {
-            Debug.WriteLine(algo.isChangedOrders);
-            if (!algo.isChangedOrders)
+            Debug.WriteLine(algo.IsChangedOrders);
+            if (!algo.IsChangedOrders)
                 return;
             DateTime time = DateTime.Now;
             Debug.WriteLine("Orders are received: " + time.Hour + ":" + time.Minute + ":" + time.Second + ":" + time.Millisecond);

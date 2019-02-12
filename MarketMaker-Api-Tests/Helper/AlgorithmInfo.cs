@@ -22,6 +22,7 @@ namespace MarketMaker_Api_Tests.Helper
         SOURCE,
         HEDGE,
     }
+
     public class AlgorithmInfo
     {
         public AlgorithmInfo()
@@ -32,6 +33,7 @@ namespace MarketMaker_Api_Tests.Helper
             InitTradeStatistic = null;
             Executions = new List<ExecutionDto>();
             Orders = new List<OrderDto>();
+            Alerts = new List<TradingAlertDto>();
         }
 
         public AlgorithmInfo(string fileInstrument, string filePricer, string fileHeadger, string fileRiskLimit) : this()
@@ -66,9 +68,10 @@ namespace MarketMaker_Api_Tests.Helper
         public AlgoInstrumentStatisticsDto TradeStatistic { get; set; }
         public List<ExecutionDto> Executions { get; set; }
         public List<OrderDto> Orders { get; set; }
+        public List<TradingAlertDto> Alerts { get; set; }
         public double OrdersBuyQty { get; set; }
         public double OrdersSellQty { get; set; }
-        public bool isChangedOrders { get; set; }
+        public bool IsChangedOrders { get; set; }
 
         public static T CreateConfig<T>(string fileName, long id)
         {
@@ -215,23 +218,6 @@ namespace MarketMaker_Api_Tests.Helper
                 count += entry.Quantity;
             }
             return Math.Round(summary / count, Util.OrderPricePrecision);
-            /*
-            double minSellPrice = 0, maxBuyPrice = 0;
-            foreach (var entry in book)
-            {
-                if (entry.Side == Side.SELL)
-                {
-                    if (entry.Level == 0)
-                        minSellPrice = entry.Price;
-                }
-                if (entry.Side == Side.BUY)
-                {
-                    if (entry.Level == 0)
-                        maxBuyPrice = entry.Price;
-                }
-            }
-            return (minSellPrice + maxBuyPrice) / 2;
-            */
         }
 
         public static double CalculateSpread(List<L2EntryDto> book)
@@ -254,6 +240,70 @@ namespace MarketMaker_Api_Tests.Helper
             return Math.Round(minSellPrice - maxBuyPrice, Util.OrderPricePrecision);
         }
 
+        public static double GetExecutionSizeFromAlert(string description)
+        {
+            string textBuy = "BUY", textSell = "SELL";
+            int textLength = description.Contains(textSell) ? textSell.Length : textBuy.Length;
+            description = description.Replace(" ", String.Empty);
+            int indexTextSide = 0, indexStartSize = 0, lenghtTextSize = 0;
+            int indexAtSymbol = description.IndexOf("@");
+
+            indexTextSide = description.Contains(textSell) ? description.IndexOf(textSell) : description.IndexOf(textBuy);
+
+            if (indexTextSide > 0 && indexAtSymbol > 0)
+            {
+                indexStartSize = indexTextSide + textLength;
+                lenghtTextSize = indexAtSymbol - indexTextSide - textLength;
+                return Double.Parse(description.Substring(indexStartSize, lenghtTextSize));
+            }
+
+            return 0;
+        }
+
+        private void ReplaceOrders(List<OrderDto> orders)
+        {
+            IsChangedOrders = false;
+            foreach (var order in orders)
+            {
+                bool isExists = false;
+                for (int i = 0; i < Orders.Count; i++)
+                {
+                    if (order.CorrelationId == Orders[i].CorrelationId)
+                    {
+                        IsChangedOrders = IsChangedOrders || !Orders[i].EqualsExceptPrice(order);
+                        Orders[i] = (OrderDto)order.Clone();
+                        isExists = true;
+                        break;
+                    }
+                }
+                if (!isExists)
+                {
+                    Orders.Add(order);
+                    IsChangedOrders = true;
+                }
+            }
+        }
+
+        public void CalculateOrdersQty()
+        {
+            OrdersBuyQty = 0;
+            OrdersSellQty = 0;
+            foreach (var order in Orders)
+            {
+                if (order.OrderStatus == OrderStatus.PARTIALLY_FILLED || order.OrderStatus == OrderStatus.NEW)
+                {
+                    if (order.Side == Side.BUY)
+                    {
+                        OrdersBuyQty += order.Size - order.ExecutedSize;
+                    }
+                    if (order.Side == Side.SELL)
+                    {
+                        OrdersSellQty += order.Size - order.ExecutedSize;
+                    }
+                }
+            }
+        }
+
         public delegate void OnMessageHandler(AlgorithmInfo algo);
 
         public event OnMessageHandler QuoteMessageHandler;
@@ -263,6 +313,7 @@ namespace MarketMaker_Api_Tests.Helper
         public event OnMessageHandler TradeStatisticHandler;
         public event OnMessageHandler ExecutionsHandler;
         public event OnMessageHandler OrdersHandler;
+        public event OnMessageHandler AlertsHandler;
 
         public void OnQuoteMessage(L2PackageDto l2Book)
         {
@@ -319,48 +370,13 @@ namespace MarketMaker_Api_Tests.Helper
             OrdersHandler?.Invoke(this);
         }
 
-        private void ReplaceOrders(List<OrderDto> orders)
+        public void OnAlertMessage(TradingAlertDto[] alerts)
         {
-            isChangedOrders = false;
-            foreach (var order in orders)
-            {
-                bool isExists = false;
-                for (int i = 0; i < Orders.Count; i++)
-                {
-                    if (order.CorrelationId == Orders[i].CorrelationId)
-                    {
-                        isChangedOrders = isChangedOrders || !Orders[i].EqualsExceptPrice(order);
-                        Orders[i] = (OrderDto)order.Clone();
-                        isExists = true;
-                        break;
-                    }
-                }
-                if (!isExists)
-                {
-                    Orders.Add(order);
-                    isChangedOrders = true;
-                }     
-            }
-        }
-
-        public void CalculateOrdersQty()
-        {
-            OrdersBuyQty = 0;
-            OrdersSellQty = 0;
-            foreach (var order in Orders)
-            {
-                if (order.OrderStatus == OrderStatus.PARTIALLY_FILLED || order.OrderStatus == OrderStatus.NEW)
-                {
-                    if (order.Side == Side.BUY)
-                    {
-                        OrdersBuyQty += order.Size - order.ExecutedSize;
-                    }
-                    if (order.Side == Side.SELL)
-                    {
-                        OrdersSellQty += order.Size - order.ExecutedSize;
-                    }
-                }
-            }
+            var newAlerts = alerts.Where(a => a.AlgoId == AlgoId && a.Description.Contains("Execution")).ToList();
+            if (newAlerts.Count == 0)
+                return;
+            Alerts.AddRange(newAlerts);
+            AlertsHandler?.Invoke(this);
         }
     }
 }
