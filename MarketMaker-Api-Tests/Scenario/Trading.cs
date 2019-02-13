@@ -30,6 +30,9 @@ namespace MarketMaker_Api_Tests.Scenario
         private static SubscriptionFactory _wsFactory;
         private static TestEventHandler _testEvent;
 
+        private static IMarketMakerRestService _restCrypto;
+        private static StompWebSocketServiceCrypto _wsCrypto;
+
         public static void Initialize()
         {
             _mmRest = MarketMakerRestServiceFactory.CreateMakerRestService(_url, "/oauth/token",
@@ -47,21 +50,21 @@ namespace MarketMaker_Api_Tests.Scenario
             };
         }
 
-        public static StompWebSocketServiceCrypto ConnectToCrypto()
+        public static void ConnectToCrypto()
         {
             string authorization = "Basic d2ViOg==";
             string urlCrypto = "http://18.218.20.9";
-            IMarketMakerRestService restCrypto = MarketMakerRestServiceFactory.CreateMakerRestService(urlCrypto, "/oauth/token",
+            _restCrypto = MarketMakerRestServiceFactory.CreateMakerRestService(urlCrypto, "/oauth/token",
                 authorization);
-            restCrypto.Authorize("Tester 1", "password");
-            StompWebSocketServiceCrypto wsCrypto = new StompWebSocketServiceCrypto("ws://18.218.20.9/websocket/v1?trader_0", restCrypto.Token);
-            wsCrypto.Subscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
-            return wsCrypto;
+            _restCrypto.Authorize("Tester 1", "password");
+            _wsCrypto = new StompWebSocketServiceCrypto("ws://18.218.20.9/websocket/v1?trader_0", _restCrypto.Token);
+            _wsCrypto.Subscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
         }
 
         [TestMethod]
         public void AddChangeStopFullInstrumentConfig()
         {
+            
             Initialize();
 
             _testEvent.Algorithms[0].InstrumentConfigInfo = _mmRest.CreateInstrument(_testEvent.Algorithms[0].InstrumentConfigInfo);
@@ -139,9 +142,11 @@ namespace MarketMaker_Api_Tests.Scenario
 
             quoteBookListener.Unsubscribe(_testEvent.Algorithms[0].AlgoId, _testEvent.Algorithms[0].OnQuoteMessage);
             _testEvent.Algorithms[0].QuoteMessageHandler -= _testEvent.CompareQuoteAgainstParams;
+            Thread.Sleep(500);
+            _wsFactory.Close();
 
             _mmRest.StopPricer(_testEvent.Algorithms[0].AlgoId);
-            Thread.Sleep(1000);
+            Thread.Sleep(500);
 
             _mmRest.DeleteAlgorithm(_testEvent.Algorithms[0].AlgoId);
             Thread.Sleep(1000);
@@ -200,13 +205,15 @@ namespace MarketMaker_Api_Tests.Scenario
             targetBookListener.Unsubscribe(_testEvent.Algorithms[0].AlgoId, _testEvent.Algorithms[0].OnTargetMessage);
             sourceBookListener.Unsubscribe(_testEvent.Algorithms[1].AlgoId, _testEvent.Algorithms[1].OnSourceMessage);
             _testEvent.Algorithms[1].SourceMessageHandler -= _testEvent.CompareSourceAgainstTargetBook;
+            Thread.Sleep(500);
+            _wsFactory.Close();
 
             _mmRest.StopPricer(_testEvent.Algorithms[0].AlgoId);
             _mmRest.StopInstrument(_testEvent.Algorithms[0].AlgoId);
 
             _mmRest.StopPricer(_testEvent.Algorithms[1].AlgoId);
             _mmRest.StopInstrument(_testEvent.Algorithms[1].AlgoId);
-            Thread.Sleep(1000);
+            Thread.Sleep(500);
 
             _mmRest.DeleteAlgorithm(_testEvent.Algorithms[0].AlgoId);
             _mmRest.DeleteAlgorithm(_testEvent.Algorithms[1].AlgoId);
@@ -246,10 +253,12 @@ namespace MarketMaker_Api_Tests.Scenario
             targetBookListener.Unsubscribe(_testEvent.Algorithms[0].AlgoId, _testEvent.Algorithms[0].OnTargetMessage);
             statisticListener.Unsubscribe(_testEvent.Algorithms[0].OnTradeStatisticMessage);
             _testEvent.Algorithms[0].TargetMessageHandler -= _testEvent.CompareStatisticAgainstTargetBook;
+            Thread.Sleep(500);
+            _wsFactory.Close();
 
             _mmRest.StopPricer(_testEvent.Algorithms[0].AlgoId);
             _mmRest.StopInstrument(_testEvent.Algorithms[0].AlgoId);
-            Thread.Sleep(1000);
+            Thread.Sleep(500);
 
             _mmRest.DeleteAlgorithm(_testEvent.Algorithms[0].AlgoId);
             Thread.Sleep(1000);
@@ -295,7 +304,8 @@ namespace MarketMaker_Api_Tests.Scenario
             quotesBookListener.Unsubscribe(algo.AlgoId, algo.OnQuoteMessage);
             targetBookListener.Unsubscribe(algo.AlgoId, algo.OnTargetMessage);
             algo.QuoteMessageHandler -= _testEvent.CompareSpread;
-            Thread.Sleep(1000);
+            Thread.Sleep(500);
+            _wsFactory.Close();
 
             _mmRest.StopPricer(algo.AlgoId);
             _mmRest.StopInstrument(algo.AlgoId);
@@ -326,7 +336,7 @@ namespace MarketMaker_Api_Tests.Scenario
             Thread.Sleep(1000);
 
             algo.OrderToSend = new OrderCrypto() { Destination = "DLTXMM", Quantity = 3, Side = Side.BUY, Type = OrderType.MARKET, SecurityId = "ETHBTC" };
-            var wsCrypto = ConnectToCrypto();
+            ConnectToCrypto();
 
             var ordersListener = _wsFactory.CreateOrdersSubscription();
             var tradeStatisticListener = _wsFactory.CreateTradingStatisticsSubscription();
@@ -341,13 +351,15 @@ namespace MarketMaker_Api_Tests.Scenario
             WaitTestEvents(4);
 
             // Buy Order
-            wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
             WaitTestEvents(5);
 
             algo.OrderToSend.Side = Side.SELL;
             // Sell Order
-            wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
             WaitTestEvents(5);
+            _wsCrypto.Unsubscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
+            _wsCrypto.Close();
 
             ordersListener.Unsubscribe(algo.AlgoId, algo.OnOrderMessage);
             algo.OrdersHandler -= _testEvent.CalculateSizeOrders;
@@ -356,6 +368,7 @@ namespace MarketMaker_Api_Tests.Scenario
             tradeStatisticListener.Unsubscribe(algo.OnTradeStatisticMessage);
             algo.TradeStatisticHandler -= _testEvent.CompareOrdersAgainstOpenQty;
             Thread.Sleep(500);
+            _wsFactory.Close();
 
             _mmRest.StopPricer(algo.AlgoId);
             _mmRest.StopInstrument(algo.AlgoId);
@@ -386,7 +399,7 @@ namespace MarketMaker_Api_Tests.Scenario
             Thread.Sleep(1000);
 
             algo.OrderToSend = new OrderCrypto() { Destination = "DLTXMM", Quantity = 5, Side = Side.BUY, Type = OrderType.MARKET, SecurityId = "ETHBTC" };
-            var wsCrypto = ConnectToCrypto();
+            ConnectToCrypto();
 
             var executionsListener = _wsFactory.CreateExecutionsSubscription();
             var tradeStatisticListener = _wsFactory.CreateTradingStatisticsSubscription();
@@ -402,21 +415,24 @@ namespace MarketMaker_Api_Tests.Scenario
             Thread.Sleep(500);
 
             // Buy Order
-            wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
-            WaitTestEvents(5);
+            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            WaitTestEvents(6);
 
             algo.OrderToSend.Side = Side.SELL;
             // Sell Order
-            wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
             WaitTestEvents(5);
+            _wsCrypto.Unsubscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
+            _wsCrypto.Close();
 
             executionsListener.Unsubscribe(algo.AlgoId, algo.OnExecutionMessage);
-            algo.ExecutionsHandler -= _testEvent.CompareStatisticAgainstTargetBook;
+            algo.ExecutionsHandler -= _testEvent.CalculateExecutions;
             Thread.Sleep(500);
 
             tradeStatisticListener.Unsubscribe(algo.OnTradeStatisticMessage);
             algo.TradeStatisticHandler -= _testEvent.MonitorChangesPosition;
             Thread.Sleep(500);
+            _wsFactory.Close();
 
             _mmRest.StopPricer(algo.AlgoId);
             _mmRest.StopInstrument(algo.AlgoId);
@@ -447,7 +463,7 @@ namespace MarketMaker_Api_Tests.Scenario
             Thread.Sleep(1000);
 
             algo.OrderToSend = new OrderCrypto() { Destination = "DLTXMM", Quantity = 5, Side = Side.BUY, Type = OrderType.MARKET, SecurityId = "ETHBTC" };
-            var wsCrypto = ConnectToCrypto();
+            ConnectToCrypto();
 
             var alertsListener = _wsFactory.CreateAlertsSubscription();
             var tradeStatisticListener = _wsFactory.CreateTradingStatisticsSubscription();
@@ -463,14 +479,16 @@ namespace MarketMaker_Api_Tests.Scenario
             Thread.Sleep(500);
 
             // Buy Order
-            wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
-            WaitTestEvents(5);
+            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            WaitTestEvents(6);
 
             algo.OrderToSend.Side = Side.SELL;
             // Sell Order
-            wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
             WaitTestEvents(5);
-  
+            _wsCrypto.Unsubscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
+            _wsCrypto.Close();
+
             alertsListener.Unsubscribe(algo.OnAlertMessage);
             algo.AlertsHandler -= _testEvent.CalculateExecutionsFromAlerts;
             Thread.Sleep(500);
@@ -478,6 +496,7 @@ namespace MarketMaker_Api_Tests.Scenario
             tradeStatisticListener.Unsubscribe(algo.OnTradeStatisticMessage);
             algo.TradeStatisticHandler -= _testEvent.MonitorChangesPosition;
             Thread.Sleep(500);
+            _wsFactory.Close();
 
             _mmRest.StopPricer(algo.AlgoId);
             _mmRest.StopInstrument(algo.AlgoId);

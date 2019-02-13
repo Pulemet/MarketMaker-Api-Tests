@@ -357,14 +357,14 @@ namespace MarketMaker_Api_Tests.Helper
         public void OnExecutionMessage(ExecutionDto[] executions)
         {
             Executions = new List<ExecutionDto>(executions);
-            if(Executions == null)
+            if(Executions.Count == 0)
                 return;
             ExecutionsHandler?.Invoke(this);
         }
 
         public void OnOrderMessage(OrderDto[] orders)
         {
-            if (orders == null)
+            if (orders.Length == 0)
                 return;
             ReplaceOrders(new List<OrderDto>(orders));
             OrdersHandler?.Invoke(this);
@@ -372,10 +372,9 @@ namespace MarketMaker_Api_Tests.Helper
 
         public void OnAlertMessage(TradingAlertDto[] alerts)
         {
-            var newAlerts = alerts.Where(a => a.AlgoId == AlgoId && a.Description.Contains("Execution")).ToList();
-            if (newAlerts.Count == 0)
+            Alerts = alerts.Where(a => a.AlgoId == AlgoId && a.Description.Contains("Execution")).ToList();
+            if (Alerts.Count == 0)
                 return;
-            Alerts.AddRange(newAlerts);
             AlertsHandler?.Invoke(this);
         }
     }

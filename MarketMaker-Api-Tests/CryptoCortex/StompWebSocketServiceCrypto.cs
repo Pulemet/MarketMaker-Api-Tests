@@ -43,7 +43,7 @@ namespace MarketMaker_Api_Tests.CriptoCortex
                 if (_subscribers.TryGetValue(subId, out action))
                     action(status);
             }
-            else
+            else if (e.Data.Length > 1)
             {
                 Debug.WriteLine("Message can't be parsed, ignore.");
             }

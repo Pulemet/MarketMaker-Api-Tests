@@ -208,7 +208,6 @@ namespace MarketMaker_Api_Tests.Helper
                 {
                     algo.ChangePositionSize += exec.ExecutionSize;
                     newTime = execTime > newTime ? execTime : newTime;
-                    //Debug.WriteLine(exec.OrderCorrelationId);
                 }
             }
 
@@ -270,6 +269,7 @@ namespace MarketMaker_Api_Tests.Helper
                               String.Format("Open Buy Qty is different: {0}, Orders Buy Qty: {1}", algo.TradeStatistic.OpenBuyQty, algo.OrdersBuyQty));
             CompareTestValues(true, Util.CompareDouble(algo.TradeStatistic.OpenSellQty, algo.OrdersSellQty),
                               String.Format("Open Sell Qty is different: {0}, Orders Sell Qty: {1}", algo.TradeStatistic.OpenSellQty, algo.OrdersSellQty));
+            _receivedTime = DateTime.Now;
         }
 
         public void CalculateSizeOrders(AlgorithmInfo algo)
