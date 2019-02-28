@@ -1,0 +1,13 @@
+{
+  "running" : true,
+  "algo_id" : 0,
+  "algo_key" : "MM",
+  "buy_quote_sizes" : "7 6 5 4 3 2 1",
+  "sell_quote_sizes" : "7 6 5 4 3 2 1",
+  "buy_margins" : "10 8 7 5 4 2 1",
+  "sell_margins" : "10 8 7 5 4 2 1",
+  "aggregation_method" : "BEST_AGGREGATED",
+  "min_price_change" : 3.0,
+  "min_spread" : null,
+  "take_out" : ""
+}

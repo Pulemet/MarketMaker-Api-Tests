@@ -1,0 +1,10 @@
+{
+  "instrument" : "ETHBTC",
+  "exchange" : "DLTXMM",
+  "underlyings" : "",
+  "running" : false,
+  "algo_id" : null,
+  "algo_key" : "MM",
+  "source_exchange" : "DLTXMM",
+  "fx_leg" : ""
+}

@@ -1,0 +1,12 @@
+{
+  "running" : false,
+  "algo_id" : 0,
+  "algo_key" : "MM",
+  "hedge_instrument" : "",
+  "position_max_norm_size" : "20 0",
+  "hedge_strategy" : "LIMIT",
+  "execution_style" : "LEAN",
+  "venues_list" : "BITFINEX GDAX",
+  "max_order_size" : 10.0,
+  "resend_time" : 1000
+}

@@ -80,6 +80,20 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="packages.config" />
+    <None Include="Params\hedger.json" />
+    <None Include="Params\hedger2.json" />
+    <None Include="Params\instrument.json" />
+    <None Include="Params\instrument2.json" />
+    <None Include="Params\pricer.json" />
+    <None Include="Params\pricer2.json" />
+    <None Include="Params\pricer3.json" />
+    <None Include="Params\pricer4.json" />
+    <None Include="Params\pricer5.json" />
+    <None Include="Params\pricer6.json" />
+    <None Include="Params\pricer7.json" />
+    <None Include="Params\risklimit.json" />
+    <None Include="Params\risklimit2.json" />
+    <None Include="Params\risklimit3.json" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

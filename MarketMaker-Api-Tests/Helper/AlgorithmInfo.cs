@@ -38,10 +38,10 @@ namespace MarketMaker_Api_Tests.Helper
 
         public AlgorithmInfo(string fileInstrument, string filePricer, string fileHeadger, string fileRiskLimit) : this()
         {
-            InstrumentConfigInfo = JsonConvert.DeserializeObject<InstrumentConfigDto>(Util.ReadFile(Util.ParamsFolder + fileInstrument));
-            PricerConfigInfo = JsonConvert.DeserializeObject<PricerConfigDto>(Util.ReadFile(Util.ParamsFolder + filePricer));
-            HedgerConfigInfo = JsonConvert.DeserializeObject<HedgerConfigDto>(Util.ReadFile(Util.ParamsFolder + fileHeadger));
-            RiskLimitConfigInfo = JsonConvert.DeserializeObject<RiskLimitsConfigDto>(Util.ReadFile(Util.ParamsFolder + fileRiskLimit));
+            InstrumentConfigInfo = JsonConvert.DeserializeObject<InstrumentConfigDto>(Util.ReadFile(fileInstrument));
+            PricerConfigInfo = JsonConvert.DeserializeObject<PricerConfigDto>(Util.ReadFile(filePricer));
+            HedgerConfigInfo = JsonConvert.DeserializeObject<HedgerConfigDto>(Util.ReadFile(fileHeadger));
+            RiskLimitConfigInfo = JsonConvert.DeserializeObject<RiskLimitsConfigDto>(Util.ReadFile(fileRiskLimit));
             IsDelete = true;
         }
 
@@ -75,7 +75,7 @@ namespace MarketMaker_Api_Tests.Helper
 
         public static T CreateConfig<T>(string fileName, long id)
         {
-            var config = JsonConvert.DeserializeObject<T>(Util.ReadFile(Util.ParamsFolder + fileName));
+            var config = JsonConvert.DeserializeObject<T>(Util.ReadFile(fileName));
             var type = typeof(T);
             var property = type.GetProperty("AlgoId");
             property?.SetValue(config, id);

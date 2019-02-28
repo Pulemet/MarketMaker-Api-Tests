@@ -283,9 +283,16 @@ namespace MarketMaker_Api_Tests.Helper
             _receivedTime = time;
         }
 
-        public void CheckWebSocketStatus(string status)
+        public void CheckWebSocketStatus(string message)
         {
+            string status = message.Substring(0, 3);
             CompareTestValues("200", status, String.Format("Error! Status {0}", status));
+        }
+
+        public void OrderRequest(string message)
+        {
+            string status = message.Substring(0, 3);
+            CompareTestValues("200", status, String.Format("Error! Order not sent! Status {0}", status));
         }
 
         public void CompareTestValues<T>(T expected, T actual, string message)

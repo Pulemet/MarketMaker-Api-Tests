@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -22,9 +23,18 @@ namespace MarketMaker_Api_Tests.Scenario
     [TestClass]
     public class Trading
     {
-        private const string _url = "https://18.218.146.41:8990";
+        private const string _url = "https://18.191.68.137:8990";
         private const string _authorization = "Basic bW13ZWJ1aTptbQ==";
+        private const string _subscribeUrl = "wss://18.191.68.137:8990/websocket/v0";
+        private const string _cryptoUrl = "http://18.218.20.9";
+        private const string _cryptoAuthorization = "Basic d2ViOg==";
+        private const string _cryptoTraderSubscribeUrl = "ws://18.218.20.9/websocket/v1?trader_0";
+        private const string _ordersDestination = "/app/v1/orders/create";
+        private const string _responsesDestination = "/user/v1/responses";
         private const string TestFail = "Test is failed!";
+
+        private static string DestinationPath = Environment.CurrentDirectory + "\\Params\\";
+        private static string SourcePath = Environment.CurrentDirectory + "\\..\\..\\..\\Params\\";
 
         private static IMarketMakerRestService _mmRest;
         private static SubscriptionFactory _wsFactory;
@@ -35,10 +45,19 @@ namespace MarketMaker_Api_Tests.Scenario
 
         public static void Initialize()
         {
+            if (!Directory.Exists(DestinationPath))
+            {
+                Directory.CreateDirectory(DestinationPath);
+                foreach (string newPath in Directory.GetFiles(SourcePath, "*.json*",
+                    SearchOption.TopDirectoryOnly))
+                    File.Copy(newPath, newPath.Replace(SourcePath, DestinationPath), true);
+            }
+                
+
             _mmRest = MarketMakerRestServiceFactory.CreateMakerRestService(_url, "/oauth/token",
                 _authorization);
             _mmRest.Authorize("admin", "admin");
-            _wsFactory = new SubscriptionFactory("wss://18.218.146.41:8990/websocket/v0", _mmRest.Token);
+            _wsFactory = new SubscriptionFactory(_subscribeUrl, _mmRest.Token);
 
             _testEvent = new TestEventHandler();
 
@@ -52,13 +71,11 @@ namespace MarketMaker_Api_Tests.Scenario
 
         public static void ConnectToCrypto()
         {
-            string authorization = "Basic d2ViOg==";
-            string urlCrypto = "http://18.218.20.9";
-            _restCrypto = MarketMakerRestServiceFactory.CreateMakerRestService(urlCrypto, "/oauth/token",
-                authorization);
+            _restCrypto = MarketMakerRestServiceFactory.CreateMakerRestService(_cryptoUrl, "/oauth/token",
+                _cryptoAuthorization);
             _restCrypto.Authorize("Tester 1", "password");
-            _wsCrypto = new StompWebSocketServiceCrypto("ws://18.218.20.9/websocket/v1?trader_0", _restCrypto.Token);
-            _wsCrypto.Subscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
+            _wsCrypto = new StompWebSocketServiceCrypto(_cryptoTraderSubscribeUrl, _restCrypto.Token);
+            _wsCrypto.Subscribe(_responsesDestination, _testEvent.CheckWebSocketStatus);
         }
 
         [TestMethod]
@@ -351,14 +368,14 @@ namespace MarketMaker_Api_Tests.Scenario
             WaitTestEvents(4);
 
             // Buy Order
-            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
             WaitTestEvents(5);
 
             algo.OrderToSend.Side = Side.SELL;
             // Sell Order
-            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
             WaitTestEvents(5);
-            _wsCrypto.Unsubscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
+            _wsCrypto.Unsubscribe(_responsesDestination, _testEvent.CheckWebSocketStatus);
             _wsCrypto.Close();
 
             ordersListener.Unsubscribe(algo.AlgoId, algo.OnOrderMessage);
@@ -415,14 +432,14 @@ namespace MarketMaker_Api_Tests.Scenario
             Thread.Sleep(500);
 
             // Buy Order
-            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
             WaitTestEvents(6);
 
             algo.OrderToSend.Side = Side.SELL;
             // Sell Order
-            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
             WaitTestEvents(5);
-            _wsCrypto.Unsubscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
+            _wsCrypto.Unsubscribe(_responsesDestination, _testEvent.CheckWebSocketStatus);
             _wsCrypto.Close();
 
             executionsListener.Unsubscribe(algo.AlgoId, algo.OnExecutionMessage);
@@ -479,14 +496,14 @@ namespace MarketMaker_Api_Tests.Scenario
             Thread.Sleep(500);
 
             // Buy Order
-            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
             WaitTestEvents(6);
 
             algo.OrderToSend.Side = Side.SELL;
             // Sell Order
-            _wsCrypto.SendMessage(Util.GetSendOrderRequest(algo.OrderToSend));
+            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
             WaitTestEvents(5);
-            _wsCrypto.Unsubscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
+            _wsCrypto.Unsubscribe(_responsesDestination, _testEvent.CheckWebSocketStatus);
             _wsCrypto.Close();
 
             alertsListener.Unsubscribe(algo.OnAlertMessage);

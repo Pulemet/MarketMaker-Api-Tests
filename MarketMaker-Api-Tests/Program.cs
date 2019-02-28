@@ -17,6 +17,7 @@ namespace MarketMaker_Api_Tests
 {
     class Program
     {
+        private const string _ordersDestination = "/app/v1/orders/create";
         public static TestEventHandler _testEvent;
         private const int AlgoId1 = 240;
         private const int AlgoId2 = 424;
@@ -53,12 +54,12 @@ namespace MarketMaker_Api_Tests
             while (i < 10)
             {
                 OrderCrypto orderToSend = new OrderCrypto() { Destination = "DLTXMM", Quantity = 1, Side = Side.BUY, Type = OrderType.MARKET, SecurityId = "ETHBTC" };
-                _wsCrypto.SendMessage(Util.GetSendOrderRequest(orderToSend));
+                _wsCrypto.SendMessage(_ordersDestination, orderToSend, _testEvent.OrderRequest);
                 Thread.Sleep(2000);
                 i++;
                 if (i == 5)
                 {
-                    _wsCrypto.Unsubscribe("/user/v1/responses", _testEvent.CheckWebSocketStatus);
+                    _wsCrypto.Unsubscribe(_ordersDestination, _testEvent.CheckWebSocketStatus);
                     _wsCrypto.Close();
                 }
                     

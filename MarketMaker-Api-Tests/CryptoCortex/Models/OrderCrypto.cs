@@ -38,9 +38,9 @@ namespace MarketMaker_Api_Tests.CryptoCortex.Models
         public OrderType Type { get; set; }
 
         [JsonProperty("security_id")]
-        public String SecurityId { get; set; }
+        public string SecurityId { get; set; }
 
         [JsonProperty("destination")]
-        public String Destination { get; set; }
+        public string Destination { get; set; }
     }
 }
