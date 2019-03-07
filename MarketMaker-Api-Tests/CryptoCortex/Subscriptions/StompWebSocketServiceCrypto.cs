@@ -23,7 +23,7 @@ namespace MarketMaker_Api_Tests.CriptoCortex
         public StompWebSocketServiceCrypto(string url, string token)
             : base(url, token) { }
 
-        public void SendMessage<T>(string topic, T body, Action<string> action)
+        public void SendMessage<T>(string additionalHeaders, string topic, T body, Action<string> action)
         {
             if (action == null)
                 throw new ArgumentNullException(nameof(action));

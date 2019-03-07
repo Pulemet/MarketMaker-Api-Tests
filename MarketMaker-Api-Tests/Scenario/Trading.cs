@@ -10,12 +10,13 @@ using System.Timers;
 using MarketMaker.Api.Models.Book;
 using MarketMaker.Api.Models.Config;
 using MarketMaker.Api.Rest;
-using MarketMaker.Api.Subscriptions;
 using MarketMaker_Api_Tests.CriptoCortex;
+using MarketMaker_Api_Tests.CryptoCortex;
 using MarketMaker_Api_Tests.CryptoCortex.Models;
 using MarketMaker_Api_Tests.Helper;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json;
+using SubscriptionFactory = MarketMaker.Api.Subscriptions.SubscriptionFactory;
 using Timer = System.Timers.Timer;
 
 namespace MarketMaker_Api_Tests.Scenario
@@ -41,7 +42,7 @@ namespace MarketMaker_Api_Tests.Scenario
         private static TestEventHandler _testEvent;
 
         private static IMarketMakerRestService _restCrypto;
-        private static StompWebSocketServiceCrypto _wsCrypto;
+        private static TraderSubscription _wsCrypto;
 
         public static void Initialize()
         {
@@ -74,8 +75,8 @@ namespace MarketMaker_Api_Tests.Scenario
             _restCrypto = MarketMakerRestServiceFactory.CreateMakerRestService(_cryptoUrl, "/oauth/token",
                 _cryptoAuthorization);
             _restCrypto.Authorize("Tester 1", "password");
-            _wsCrypto = new StompWebSocketServiceCrypto(_cryptoTraderSubscribeUrl, _restCrypto.Token);
-            _wsCrypto.Subscribe(_responsesDestination, _testEvent.CheckWebSocketStatus);
+            _wsCrypto = new TraderSubscription(_cryptoTraderSubscribeUrl, _restCrypto.Token);
+            _wsCrypto.ResponsesSubscribe();
         }
 
         [TestMethod]
@@ -368,14 +369,14 @@ namespace MarketMaker_Api_Tests.Scenario
             WaitTestEvents(4);
 
             // Buy Order
-            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
+            _wsCrypto.SendOrder(algo.OrderToSend, _testEvent.CheckOrderSent);
             WaitTestEvents(5);
 
             algo.OrderToSend.Side = Side.SELL;
             // Sell Order
-            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
+            _wsCrypto.SendOrder(algo.OrderToSend, _testEvent.CheckOrderSent);
             WaitTestEvents(5);
-            _wsCrypto.Unsubscribe(_responsesDestination, _testEvent.CheckWebSocketStatus);
+            _wsCrypto.StopResponses();
             _wsCrypto.Close();
 
             ordersListener.Unsubscribe(algo.AlgoId, algo.OnOrderMessage);
@@ -432,14 +433,14 @@ namespace MarketMaker_Api_Tests.Scenario
             Thread.Sleep(500);
 
             // Buy Order
-            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
+            _wsCrypto.SendOrder(algo.OrderToSend, _testEvent.CheckOrderSent);
             WaitTestEvents(6);
 
             algo.OrderToSend.Side = Side.SELL;
             // Sell Order
-            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
+            _wsCrypto.SendOrder(algo.OrderToSend, _testEvent.CheckOrderSent);
             WaitTestEvents(5);
-            _wsCrypto.Unsubscribe(_responsesDestination, _testEvent.CheckWebSocketStatus);
+            _wsCrypto.StopResponses();
             _wsCrypto.Close();
 
             executionsListener.Unsubscribe(algo.AlgoId, algo.OnExecutionMessage);
@@ -486,7 +487,7 @@ namespace MarketMaker_Api_Tests.Scenario
             var tradeStatisticListener = _wsFactory.CreateTradingStatisticsSubscription();
 
             algo.AlertsHandler += _testEvent.CalculateExecutionsFromAlerts;
-            alertsListener.Subscribe(algo.OnAlertMessage);
+            alertsListener.Subscribe(algo.OnExecutionAlertMessage);
 
             algo.TradeStatisticHandler += _testEvent.MonitorChangesPosition;
             tradeStatisticListener.Subscribe(algo.OnTradeStatisticMessage);
@@ -496,17 +497,17 @@ namespace MarketMaker_Api_Tests.Scenario
             Thread.Sleep(500);
 
             // Buy Order
-            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
+            _wsCrypto.SendOrder(algo.OrderToSend, _testEvent.CheckOrderSent);
             WaitTestEvents(6);
 
             algo.OrderToSend.Side = Side.SELL;
             // Sell Order
-            _wsCrypto.SendMessage(_ordersDestination, algo.OrderToSend, _testEvent.OrderRequest);
+            _wsCrypto.SendOrder(algo.OrderToSend, _testEvent.CheckOrderSent);
             WaitTestEvents(5);
-            _wsCrypto.Unsubscribe(_responsesDestination, _testEvent.CheckWebSocketStatus);
+            _wsCrypto.StopResponses();
             _wsCrypto.Close();
 
-            alertsListener.Unsubscribe(algo.OnAlertMessage);
+            alertsListener.Unsubscribe(algo.OnExecutionAlertMessage);
             algo.AlertsHandler -= _testEvent.CalculateExecutionsFromAlerts;
             Thread.Sleep(500);
 
@@ -526,6 +527,70 @@ namespace MarketMaker_Api_Tests.Scenario
             Assert.AreEqual(true, _testEvent.TestResult, TestFail);
         }
 
+        [TestMethod]
+        public void LeanHedger()
+        {
+            Initialize();
+
+            AlgorithmInfo algo = _testEvent.Algorithms[0];
+            algo.InstrumentConfigInfo =
+                _mmRest.CreateInstrument(algo.InstrumentConfigInfo);
+            algo.SetAlgoId(algo.InstrumentConfigInfo.AlgoId);
+            algo.PricerConfigInfo = _mmRest.SavePricer(algo.PricerConfigInfo);
+
+            algo.HedgerConfigInfo = _mmRest.SaveHedger(algo.HedgerConfigInfo);
+            algo.RiskLimitConfigInfo =
+                _mmRest.SaveRiskLimitsConfig(algo.RiskLimitConfigInfo);
+            Thread.Sleep(1000);
+
+            _mmRest.StartInstrument(algo.AlgoId);
+            _mmRest.StartPricer(algo.AlgoId);
+            Thread.Sleep(1000);
+
+            var alertsListener = _wsFactory.CreateAlertsSubscription();
+
+            algo.AlertsHandler += _testEvent.CheckExecutionsInEvents;
+            alertsListener.Subscribe(algo.OnExecutionAlertMessage);
+
+            algo.OrderToSend = new OrderCrypto() { Destination = "DLTXMM", Quantity = 10, Side = Side.SELL, Type = OrderType.MARKET, SecurityId = "ETHBTC" };
+            ConnectToCrypto();
+            Thread.Sleep(1000);
+            _wsCrypto.OrdersReceiver(algo.CheckOrderStatus);
+            Thread.Sleep(2000);
+
+            // Sell Order
+            _testEvent.WaitOrderFill(algo, _wsCrypto);
+
+            algo.OrderToSend.Type = OrderType.LIMIT;
+            algo.OrderToSend.Side = Side.BUY;
+            algo.OrderToSend.Quantity = 1.0;
+            algo.OrderToSend.TimeInForce = TimeInForce.DAY;
+            algo.OrderToSend.Price = 0.033;
+            _mmRest.StopPricer(algo.AlgoId);
+            _mmRest.StartHedger(algo.AlgoId);
+            Thread.Sleep(1000);
+
+            // Buy Order for hedger
+            _testEvent.WaitOrderFill(algo, _wsCrypto);
+            WaitTestEvents(3);
+
+            if (_testEvent.TestResult)
+                _testEvent.CheckFillExecutions(algo);
+
+            _wsCrypto.OrdersUnsubscribe(algo.CheckOrderStatus);
+            _wsCrypto.StopResponses();
+            _wsCrypto.Close();
+            alertsListener.Unsubscribe(algo.OnExecutionAlertMessage);
+            algo.AlertsHandler -= _testEvent.CheckExecutionsInEvents;
+            Thread.Sleep(500);
+
+            _wsFactory.Close();
+
+            FinishAlgo(true, false, true, algo);
+            Assert.AreEqual(true, _mmRest.GetInstrument(algo.AlgoId) == null, "Deleted algorithm doesn't equal to null");
+            Assert.AreEqual(true, _testEvent.TestResult, TestFail);
+        }
+
         // ---------------------------------------------------------------------------------------------------------------------------------------------------------------
         public void WaitTestEvents(int seconds)
         {
@@ -538,6 +603,20 @@ namespace MarketMaker_Api_Tests.Scenario
                 }
                 Thread.Sleep(500);
             }
+        }
+
+        public void FinishAlgo(bool isInstrument, bool isPricer, bool isHedger, AlgorithmInfo algo)
+        {
+            if (isHedger)
+                _mmRest.StopHedger(algo.AlgoId);
+            if(isPricer)
+                _mmRest.StopPricer(algo.AlgoId);
+            if(isInstrument)
+                _mmRest.StopInstrument(algo.AlgoId);
+            Thread.Sleep(500);
+
+            _mmRest.DeleteAlgorithm(algo.AlgoId);
+            Thread.Sleep(500);
         }
     }
 }

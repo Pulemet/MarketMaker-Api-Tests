@@ -64,8 +64,13 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CryptoCortex\Models\Event.cs" />
+    <Compile Include="CryptoCortex\Models\Order.cs" />
     <Compile Include="CryptoCortex\Models\OrderCrypto.cs" />
-    <Compile Include="CryptoCortex\StompWebSocketServiceCrypto.cs" />
+    <Compile Include="CryptoCortex\Models\OrderResponce.cs" />
+    <Compile Include="CryptoCortex\Subscriptions\StompWebSocketServiceCrypto.cs" />
+    <Compile Include="CryptoCortex\Subscriptions\SubscriptionFactory.cs" />
+    <Compile Include="CryptoCortex\Subscriptions\TraderSubscription.cs" />
     <Compile Include="Helper\AlgorithmInfo.cs" />
     <Compile Include="MarketMakerRest.cs" />
     <Compile Include="Helper\TestEventHandler.cs" />

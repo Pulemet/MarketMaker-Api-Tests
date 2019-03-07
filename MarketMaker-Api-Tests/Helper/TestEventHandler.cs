@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using MarketMaker.Api.Models.Book;
 using MarketMaker.Api.Models.Statistics;
 using MarketMaker.Api.Rest;
 using MarketMaker.Api.Subscriptions;
+using MarketMaker_Api_Tests.CryptoCortex;
+using MarketMaker_Api_Tests.CryptoCortex.Models;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Newtonsoft.Json;
 
@@ -234,6 +237,30 @@ namespace MarketMaker_Api_Tests.Helper
             CalculateSizeExecutions(algo, newTime);
         }
 
+        public void CheckExecutionsInEvents(AlgorithmInfo algo)
+        {
+            Debug.WriteLine("Number of alerts: {0}", algo.Alerts.Count);
+            foreach (var alert in algo.Alerts)
+            {
+                DateTime execTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(alert.Timestamp).ToLocalTime();
+                if (execTime > StartTestTime)
+                {
+                    if (algo.OrderToSend.Side == Side.BUY)
+                        algo.AlgoExecutions.FillSellQty += AlgorithmInfo.GetExecutionSizeFromAlert(alert.Description);
+                    if (algo.OrderToSend.Side == Side.SELL)
+                        algo.AlgoExecutions.FillBuyQty += AlgorithmInfo.GetExecutionSizeFromAlert(alert.Description);
+                }
+            }
+        }
+
+        public void CheckFillExecutions(AlgorithmInfo algo)
+        {
+            CompareTestValues(true, Util.CompareDouble(algo.AlgoExecutions.SentSellQty, algo.AlgoExecutions.FillBuyQty),
+                String.Format("Sent Sell Qty ({0}) is not equal to Fill Qty ({1})", algo.AlgoExecutions.SentSellQty, algo.AlgoExecutions.FillBuyQty));
+            CompareTestValues(true, Util.CompareDouble(algo.AlgoExecutions.SentBuyQty, algo.AlgoExecutions.FillSellQty),
+                String.Format("Sent Buy Qty ({0}) is not equal to Fill Qty ({1})", algo.AlgoExecutions.SentBuyQty, algo.AlgoExecutions.FillSellQty));
+        }
+
         public void CalculateSizeExecutions(AlgorithmInfo algo, DateTime newTime)
         {
             Debug.WriteLine("Summary executions size: {0}", algo.ChangePositionSize);
@@ -272,6 +299,45 @@ namespace MarketMaker_Api_Tests.Helper
             _receivedTime = DateTime.Now;
         }
 
+        public void OnBestBidAsk(AlgorithmInfo algo)
+        {
+            List<L2EntryDto> orders = algo.AlgoDictionary[BookType.QUOTE].Entries
+                .FindAll(o => o.Side == algo.OrderToSend.Side);
+
+            if(orders.Count > 0)
+                algo.OrderToSend.Price = FindBestBidAsk(orders);
+        }
+
+        private double FindBestBidAsk(List<L2EntryDto> orders)
+        {
+            int level = orders[0].Level;
+            int index = 0;
+
+            for (int i = 1; i < orders.Count; i++)
+            {
+                if (orders[i].Level < level)
+                {
+                    index = i;
+                    level = orders[i].Level;
+                }
+            }
+            return orders[index].Price;
+        }
+
+        public void WaitOrderFill(AlgorithmInfo algo, TraderSubscription traderSubscription)
+        {
+            algo.SentOrderStatus = SentOrderStatus.PENDING;
+            int counter = 0;
+            traderSubscription.SendOrder(algo.OrderToSend, algo.CheckOrderSendSaveId);
+            while (TestResult && algo.SentOrderStatus == SentOrderStatus.PENDING && counter++ < 50)
+            {
+                Thread.Sleep(100);
+            }
+            CompareTestValues(true, algo.SentOrderStatus != SentOrderStatus.PENDING, "Order is not filled during 5 sec.");
+            Debug.WriteLine("Waiting is over, order status: {0}", algo.SentOrderStatus);
+            Thread.Sleep(1000);
+        }
+
         public void CalculateSizeOrders(AlgorithmInfo algo)
         {
             Debug.WriteLine(algo.IsChangedOrders);
@@ -283,13 +349,7 @@ namespace MarketMaker_Api_Tests.Helper
             _receivedTime = time;
         }
 
-        public void CheckWebSocketStatus(string message)
-        {
-            string status = message.Substring(0, 3);
-            CompareTestValues("200", status, String.Format("Error! Status {0}", status));
-        }
-
-        public void OrderRequest(string message)
+        public void CheckOrderSent(string message)
         {
             string status = message.Substring(0, 3);
             CompareTestValues("200", status, String.Format("Error! Order not sent! Status {0}", status));
@@ -298,7 +358,8 @@ namespace MarketMaker_Api_Tests.Helper
         public void CompareTestValues<T>(T expected, T actual, string message)
         {
             TestResult = expected.Equals(actual) && TestResult;
-            Assert.AreEqual(expected, actual, message);
+            if(!TestResult)
+                Console.WriteLine(message);
         }
     }
 }

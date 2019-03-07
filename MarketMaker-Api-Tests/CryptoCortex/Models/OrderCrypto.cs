@@ -13,8 +13,17 @@ namespace MarketMaker_Api_Tests.CryptoCortex.Models
 {
     public enum OrderType
     {
-        MARKET,
-        LIMIT
+        LIMIT,
+        MARKET
+    }
+
+    public enum TimeInForce
+    {
+        GTD,
+        DAY,
+        GTC,
+        FOK,
+        IOC
     }
 
     public class OrderCrypto
@@ -24,6 +33,11 @@ namespace MarketMaker_Api_Tests.CryptoCortex.Models
             public EnumConverter() : base(new SnakeCaseNamingStrategy(), false)
             {
             }
+        }
+
+        public virtual object Clone()
+        {
+            return this.MemberwiseClone();
         }
 
         [JsonProperty("quantity")]
@@ -42,5 +56,15 @@ namespace MarketMaker_Api_Tests.CryptoCortex.Models
 
         [JsonProperty("destination")]
         public string Destination { get; set; }
+
+        [JsonProperty("time_in_force")]
+        [JsonConverter(typeof(EnumConverter))]
+        public TimeInForce? TimeInForce { get; set; }
+
+        [JsonProperty("price")]
+        public double? Price { get; set; }
+
+        [JsonProperty("expire_time")]
+        public long? ExpireTime { get; set; }
     }
 }

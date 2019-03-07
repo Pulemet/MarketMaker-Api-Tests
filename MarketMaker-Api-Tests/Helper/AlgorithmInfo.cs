@@ -15,12 +15,35 @@ using Newtonsoft.Json;
 
 namespace MarketMaker_Api_Tests.Helper
 {
+    public class AlgoExecutions
+    {
+        public double SentBuyQty { get; set; }
+        public double SentSellQty { get; set; }
+        public double FillBuyQty { get; set; }
+        public double FillSellQty { get; set; }
+
+        public AlgoExecutions()
+        {
+            SentBuyQty = 0;
+            SentSellQty = 0;
+            FillBuyQty = 0;
+            SentSellQty = 0;
+        }
+    }
     public enum BookType
     {
         TARGET,
         QUOTE,
         SOURCE,
         HEDGE,
+    }
+
+    public enum SentOrderStatus
+    {
+        CANCELED,
+        PENDING,
+        FILLED,
+        INDEFINITE
     }
 
     public class AlgorithmInfo
@@ -34,6 +57,9 @@ namespace MarketMaker_Api_Tests.Helper
             Executions = new List<ExecutionDto>();
             Orders = new List<OrderDto>();
             Alerts = new List<TradingAlertDto>();
+            SentOrderStatus = SentOrderStatus.INDEFINITE;
+            IsOrderSent = false;
+            AlgoExecutions = new AlgoExecutions();
         }
 
         public AlgorithmInfo(string fileInstrument, string filePricer, string fileHeadger, string fileRiskLimit) : this()
@@ -72,6 +98,10 @@ namespace MarketMaker_Api_Tests.Helper
         public double OrdersBuyQty { get; set; }
         public double OrdersSellQty { get; set; }
         public bool IsChangedOrders { get; set; }
+        public bool IsOrderSent { get; set; }
+        public string SentOrderId { get; set; }
+        public SentOrderStatus SentOrderStatus { get; set; }
+        public AlgoExecutions AlgoExecutions { get; set; }
 
         public static T CreateConfig<T>(string fileName, long id)
         {
@@ -304,6 +334,64 @@ namespace MarketMaker_Api_Tests.Helper
             }
         }
 
+        private void SaveSentOrderId(string message)
+        {
+            var order = JsonConvert.DeserializeObject<Order>(message);
+            SentOrderId = order.Id;
+            if (order.Side == Side.BUY)
+                AlgoExecutions.SentBuyQty += order.Quantity;
+            if (order.Side == Side.SELL)
+                AlgoExecutions.SentSellQty += order.Quantity;
+            Debug.WriteLine("Order are sent. Side: {0}, Quantity: {1}", order.Side, order.Quantity);
+        }
+
+        public void CheckOrderSendSaveId(string message)
+        {
+            IsOrderSent = IsSuccessStatus(message.Substring(0, 3), "Order is not sent, Status:");
+            if (IsOrderSent)
+                SaveSentOrderId(message.Substring(3));
+            else if (!IsOrderSent)
+            {
+                SentOrderStatus = SentOrderStatus.INDEFINITE;
+            }
+        }
+
+        private bool IsSuccessStatus(string status, string message)
+        {
+            if (status != "200")
+            {
+                Console.WriteLine("{0} {1}", message, status);
+                return false;
+            }
+
+            return true;
+        }
+
+        public void CheckOrderStatus(string message)
+        {
+            OrderResponce orderResponce = JsonConvert.DeserializeObject<OrderResponce>(message.Substring(3));
+            Debug.WriteLine("Orders Id = {0} || Status: {1}", orderResponce.Order.Id, orderResponce.Order.Status);
+            Debug.WriteLine("Sent Order Id: " + SentOrderId);
+            if (orderResponce.Order.Id != SentOrderId)
+                return;
+            if (orderResponce.Order.Status == Status.COMPLETELY_FILLED)
+            {
+                SentOrderStatus = SentOrderStatus.FILLED;
+                return;
+            }
+            else if (orderResponce.Order.Status == Status.CANCELED)
+            {
+                SentOrderStatus = SentOrderStatus.CANCELED;
+                return;
+            }
+            else if (orderResponce.Order.Status == Status.NEW || orderResponce.Order.Status == Status.PENDING_NEW || orderResponce.Order.Status == Status.PARTIALLY_FILLED)
+            {
+                SentOrderStatus = SentOrderStatus.PENDING;
+                return;
+            }
+            SentOrderStatus = SentOrderStatus.INDEFINITE;
+        }
+
         public delegate void OnMessageHandler(AlgorithmInfo algo);
 
         public event OnMessageHandler QuoteMessageHandler;
@@ -370,10 +458,10 @@ namespace MarketMaker_Api_Tests.Helper
             OrdersHandler?.Invoke(this);
         }
 
-        public void OnAlertMessage(TradingAlertDto[] alerts)
+        public void OnExecutionAlertMessage(TradingAlertDto[] alerts)
         {
-            Alerts = alerts.Where(a => a.AlgoId == AlgoId && a.Description.Contains("Execution")).ToList();
-            if (Alerts.Count == 0)
+            Alerts = alerts.Where(a => a.AlgoId == AlgoId && a.Description.Contains("Execution:")).ToList();
+            if (Alerts == null || Alerts.Count == 0)
                 return;
             AlertsHandler?.Invoke(this);
         }
